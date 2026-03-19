@@ -1,3 +1,0 @@
-- [ ] ~~01_df-creation.R をjulia版と同じコードを出すように修正する~~
-- [x] tagの判定がjuliaコードで間違っている。例えば図番台帳.md。これを修正する。
-- [x] 01_df-creation.pyを作成

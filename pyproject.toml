@@ -1,0 +1,22 @@
+[project]
+name = "upnote-md-mgr"
+version = "0.1.0"
+description = "UpNote Markdown Manager - BM25 + Hybrid RAG search"
+requires-python = ">=3.10"
+dependencies = [
+    "anthropic",
+    "sentence-transformers",
+    "faiss-cpu",
+    "tqdm",
+    "streamlit",
+    "polars",
+    "sudachipy",
+    "sudachidict-core",
+    "rank-bm25",
+    "numpy",
+    "pandas",
+    "streamlit-aggrid==0.3.4",
+]
+
+[tool.uv]
+dev-dependencies = []

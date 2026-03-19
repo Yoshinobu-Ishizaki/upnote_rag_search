@@ -53,6 +53,9 @@ UpNote*/
 
 data/
 
+# Secrets
+.env
+
 .ipynb_checkpoints
 settings.json
 

@@ -51,6 +51,11 @@ def get_api_key() -> str:
     return os.environ.get("ANTHROPIC_API_KEY", "")
 
 
+def get_claude_model() -> str:
+    cfg = _read_config()
+    return cfg.get("settings", "CLAUDE_MODEL", fallback="claude-haiku-4-5-20251001")
+
+
 def save_backup_path(path: str) -> None:
     """Save backup path to config.ini."""
     cfg = _read_config()

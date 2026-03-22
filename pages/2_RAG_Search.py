@@ -10,7 +10,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.bm25_search import build_bm25, load_split_data
-from src.config import get_api_key, get_max_context_chars, get_top_k
+from src.config import get_api_key, get_claude_model, get_max_context_chars, get_top_k
 from src.embedding import get_embedding_model, load_index, semantic_search
 from src.hybrid_search import reciprocal_rank_fusion
 from src.tokenizer import create_tokenizer, tokenize_text
@@ -168,7 +168,7 @@ with st.spinner("Claude に問い合わせ中..."):
 
     client = anthropic.Anthropic(api_key=api_key)
     message = client.messages.create(
-        model="claude-sonnet-4-6",
+        model=get_claude_model(),
         max_tokens=2048,
         system=(
             "提供されたノートのコンテキストのみを使って質問に答えてください。"

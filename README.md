@@ -1,37 +1,53 @@
-UpNote Markdown Manager
+UpNote RAG Search
 ===
 
 yoshinobu ishizaki
 
 ## Abstract
 
-Several scripts to manage markdown notes from UpNote.
+Hybrid RAG (Retrieval-Augmented Generation) search for UpNote notes.
+Combines BM25 keyword matching and semantic vector search (RRF fusion),
+then generates answers via Claude API.
 
-## Data
+## Requirements
 
-1. Export your UpNote data with "export as markdown".
-   - Select "Separate Documents"
-   - Check "Includes additional data..." 
+- UpNote desktop app (to export `.upnx` backup)
+- Anthropic API key
+- Python environment managed by uv
 
-    ![](image/export_to_markdown.png)
+## Setup
 
-2. Place all of your data into "UpNote" folder.
+### 1. Prepare backup file
 
-    `UpNote/General Space/...`
+Export your UpNote data as a native backup (`.upnx` file) from the UpNote app.
 
-## Preparation
+### 2. Configure settings
 
-### Convert data to dataframe
+Launch the app and open the Settings page to set:
+- Path to your `.upnx` backup file
+- Anthropic API key
 
-1. Run [01_df-creation.py](script/01_df-creation.py) to generate `upnote_text.csv`
-2. Place `upnote_text.csv` under `data` folder.
-3. Run [02_splitwords.py](script/02_splitwords.py) to generate `data/upnote_text_split.csv`.
+### 3. Preprocess data
 
-## Keyword Search
+Run the preprocessing pipeline to build the search index:
 
-Run [keyword_search.py](keyword_search/keyword_search.py) for keyword search of notebook. Streamlit web interface will launched.
+    uv run python preprocess.py
 
-![alt text](image/keyword_search_image.png)
+This will:
+1. Parse the `.upnx` file → `data/upnote_text.csv`
+2. Tokenize with Sudachi → `data/upnote_text_split.csv`
+3. Build FAISS semantic index → `data/faiss_index/`
 
-This web interface reads `upnote_text.csv` and `upnote_text_split.csv` both.
+### 4. Launch the app
 
+    uv run streamlit run app.py
+
+## Usage
+
+Open the **RAG Search** page, enter a query in natural language.
+Optionally filter by category, tags, or date range.
+The app returns a Claude-generated answer with referenced notes.
+
+## Credits
+
+This application — including the RAG search pipeline, hybrid search implementation, and answer generation — was built with [Claude](https://claude.ai) (Anthropic).

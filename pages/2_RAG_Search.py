@@ -86,15 +86,15 @@ top_k = get_top_k()
 # UI
 # ---------------------------------------------------------------------------
 
-question = st.text_area(
-    "質問を入力してください",
-    placeholder="例: Pythonでファイルを読み込む方法は？",
-    height=100,
-)
-
-col1, col2 = st.columns([1, 5])
-with col1:
-    search_btn = st.button("検索・回答生成", type="primary", use_container_width=True)
+with st.form("rag_search_form"):
+    question = st.text_area(
+        "質問を入力してください",
+        placeholder="例: Pythonでファイルを読み込む方法は？",
+        height=100,
+    )
+    col1, col2 = st.columns([1, 5])
+    with col1:
+        search_btn = st.form_submit_button("検索・回答生成", type="primary", use_container_width=True)
 
 if not search_btn or not question.strip():
     st.stop()

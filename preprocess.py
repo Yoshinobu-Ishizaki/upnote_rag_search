@@ -56,11 +56,7 @@ def main() -> None:
 
     # Step 2: upnote_text.csv → upnote_text_split.csv (BM25 tokens)
     _print_step(2, "Tokenizing text for BM25 search")
-    cmd2 = [sys.executable, str(PROJECT_ROOT / "script" / "02_splitwords.py")]
-    result = subprocess.run(cmd2, cwd=str(PROJECT_ROOT))
-    if result.returncode != 0:
-        print("\nStep 2 failed. Aborting.")
-        sys.exit(1)
+    _tokenize_for_bm25()
 
     # Step 3: embeddings.npy + faiss.index
     _print_step(3, "Creating sentence embeddings and FAISS index")
@@ -84,6 +80,21 @@ def _print_step(n: int, description: str) -> None:
     print("=" * 60)
     print(f"Step {n}: {description}")
     print("=" * 60)
+
+
+def _tokenize_for_bm25() -> None:
+    import polars as pl
+    from src.tokenizer import create_tokenizer, tokenize_text, tokens_to_string
+
+    df = pl.read_csv(DATA_DIR / "upnote_text.csv")
+    tokenizer = create_tokenizer()
+    tokens_list = [
+        tokens_to_string(tokenize_text(s, tokenizer))
+        for s in df["contents"].fill_null("").to_list()
+    ]
+    df.with_columns(pl.Series("tokens", tokens_list)) \
+      .select(pl.exclude("contents")) \
+      .write_csv(DATA_DIR / "upnote_text_split.csv")
 
 
 def _create_embeddings() -> None:

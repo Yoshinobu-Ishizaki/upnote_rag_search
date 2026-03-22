@@ -3,3 +3,4 @@
 - When running app.py, you should calll `uv run strealmlit run app.py`
 - Always plan first before editting files.
 - If there is TODO.md, read it and tackle with them one by one.
+- Ask user to commit changes if one plan is completed.

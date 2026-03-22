@@ -167,8 +167,13 @@ with st.spinner("検索中..."):
         ranked = [(doc_id, 0.0) for doc_id in bm25_ids[:top_k]]
 
     if not ranked:
-        st.warning("関連するノートが見つかりませんでした。キーワードを変えてお試しください。")
-        st.stop()
+        if not filters_active:
+            st.warning("関連するノートが見つかりませんでした。キーワードを変えてお試しください。")
+            st.stop()
+        # else: filters active → fall through to filter-based fallback below
+        ranked = []  # ensure ranked is defined for rrf_score_map later
+
+    filters_active = bool(selected_categories or selected_tags or date_mode != "すべて")
 
     # Build context
     max_chars = get_max_context_chars()
@@ -180,38 +185,75 @@ with st.spinner("検索中..."):
         row["id"]: (row["fpath"], row["contents"] or "", row["created"], row["category"], row["tags"])
         for row in text_df.iter_rows(named=True)
     }
+    print(f"[DEBUG] text_df rows={len(text_df)}, text_lookup keys={len(text_lookup)}")
+
+    _filter_debug_done = [False]
 
     def _passes_filter(created, category, tags):
-        if selected_categories and category not in selected_categories:
+        def _cat_matches():
+            return any(
+                category == sel or category.startswith(sel + ":")
+                for sel in selected_categories
+            )
+        debug = not _filter_debug_done[0] and selected_categories and _cat_matches()
+        if selected_categories and not _cat_matches():
             return False
         if selected_tags:
             note_tags = set(tags.split("|")) if tags else set()
             if not note_tags.intersection(selected_tags):
+                if debug:
+                    print(f"[DEBUG] _passes_filter FAIL tags: selected_tags={selected_tags!r}, note_tags={note_tags!r}")
+                    _filter_debug_done[0] = True
                 return False
         if date_mode != "すべて" and created:
             try:
                 note_date = datetime.date.fromisoformat(created[:10])
                 if date_mode == "以前" and date_before and note_date > date_before:
+                    if debug:
+                        print(f"[DEBUG] _passes_filter FAIL date 以前: note_date={note_date}, date_before={date_before}")
+                        _filter_debug_done[0] = True
                     return False
                 if date_mode == "以降" and date_after and note_date < date_after:
+                    if debug:
+                        print(f"[DEBUG] _passes_filter FAIL date 以降: note_date={note_date}, date_after={date_after}")
+                        _filter_debug_done[0] = True
                     return False
                 if date_mode == "範囲" and date_from and date_to and not (date_from <= note_date <= date_to):
+                    if debug:
+                        print(f"[DEBUG] _passes_filter FAIL date 範囲: note_date={note_date}, date_from={date_from}, date_to={date_to}")
+                        _filter_debug_done[0] = True
                     return False
             except ValueError:
                 pass
         return True
+
+    sample_cats = [(doc_id, repr(category)) for doc_id, (_, _, _, category, _) in list(text_lookup.items())[:5]]
+    print(f"[DEBUG] selected_categories={selected_categories!r}")
+    print(f"[DEBUG] sample category values in text_lookup: {sample_cats}")
+    for doc_id, (_, _, created, category, tags) in list(text_lookup.items())[:200]:
+        if selected_categories and any(category == sel or category.startswith(sel + ":") for sel in selected_categories):
+            print(f"[DEBUG] MATCH FOUND id={doc_id} cat={repr(category)} passes={_passes_filter(created, category, tags)}")
+            break
+    else:
+        first_cat = next(iter(text_lookup.values()), None)
+        if first_cat:
+            _, _, _, cat, _ = first_cat
+            print(f"[DEBUG] NO MATCH in first 200: type(cat)={type(cat).__name__} cat={repr(cat)} type(sel[0])={type(selected_categories[0]).__name__ if selected_categories else 'N/A'} equal={cat == selected_categories[0] if selected_categories else 'N/A'}")
 
     valid_ids = {
         doc_id
         for doc_id, (fpath, contents, created, category, tags) in text_lookup.items()
         if _passes_filter(created, category, tags)
     }
+    print(f"[DEBUG] valid_ids count={len(valid_ids)}, sample={list(valid_ids)[:3]}")
 
     included_ids = []
     for doc_id in result_ids:
         if doc_id not in text_lookup or doc_id not in valid_ids:
             continue
         fpath, contents, *_ = text_lookup[doc_id]
+        if not contents:
+            continue
         if context_char_count + len(contents) > max_chars:
             break
         context_parts.append(f"--- {fpath} ---\n{contents}")
@@ -219,6 +261,42 @@ with st.spinner("検索中..."):
         included_ids.append(doc_id)
 
     context = "\n\n".join(context_parts)
+    print(f"[DEBUG] included_ids after main loop={len(included_ids)}, filters_active={filters_active}")
+
+    # Fallback: if search results yielded no context but filters are active,
+    # include ALL documents that pass the filter.
+    # Claude's context window is ~200k tokens ≈ 750k chars; warn if truncated.
+    CLAUDE_CONTEXT_LIMIT_CHARS = 750_000
+
+    fallback_truncated = False
+    print(f"[DEBUG] fallback check: not included_ids={not included_ids}, filters_active={filters_active}, valid_ids nonempty={bool(valid_ids)}")
+    if not included_ids and filters_active and valid_ids:
+        _fb_total = _fb_skipped_id = _fb_skipped_content = 0
+        for row in text_df.iter_rows(named=True):
+            _fb_total += 1
+            doc_id = row["id"]
+            if doc_id not in valid_ids:
+                _fb_skipped_id += 1
+                continue
+            contents = row["contents"] or ""
+            if not contents:
+                _fb_skipped_content += 1
+                continue
+            fpath = row["fpath"]
+            if context_char_count + len(contents) > CLAUDE_CONTEXT_LIMIT_CHARS:
+                fallback_truncated = True
+                break
+            context_parts.append(f"--- {fpath} ---\n{contents}")
+            context_char_count += len(contents)
+            included_ids.append(doc_id)
+        print(f"[DEBUG] fallback loop: total={_fb_total}, skipped(not in valid_ids)={_fb_skipped_id}, skipped(no content)={_fb_skipped_content}, included={len(included_ids)}")
+        context = "\n\n".join(context_parts)
+
+    if fallback_truncated:
+        st.warning(
+            "フィルター条件に一致するノートの合計サイズが Claude のコンテキスト上限（約 750,000 文字）を超えたため、"
+            "一部のノートはコンテキストから除外されました。"
+        )
 
 with st.spinner("Claude に問い合わせ中..."):
     import anthropic

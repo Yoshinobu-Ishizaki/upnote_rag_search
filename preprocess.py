@@ -8,7 +8,6 @@ Usage:
     python preprocess.py [--path "D:/backup/UpNote/General Space"]
 """
 import argparse
-import subprocess
 import sys
 from pathlib import Path
 
@@ -46,13 +45,7 @@ def main() -> None:
 
     # Step 1: Markdown → upnote_text.csv
     _print_step(1, "Creating text dataframe from markdown files")
-    cmd1 = [sys.executable, str(PROJECT_ROOT / "script" / "01_df-creation.py")]
-    if args.path:
-        cmd1 += ["--path", args.path]
-    result = subprocess.run(cmd1, cwd=str(PROJECT_ROOT))
-    if result.returncode != 0:
-        print("\nStep 1 failed. Aborting.")
-        sys.exit(1)
+    _create_dataframe(args.path)
 
     # Step 2: upnote_text.csv → upnote_text_split.csv (BM25 tokens)
     _print_step(2, "Tokenizing text for BM25 search")
@@ -64,6 +57,19 @@ def main() -> None:
     _create_embeddings()
 
     _print_done()
+
+
+def _create_dataframe(path: str | None) -> None:
+    from src.parser import get_backup_root, find_latest_upnx, parse_upnx
+
+    backup_root = get_backup_root(path, PROJECT_ROOT)
+    upnx = find_latest_upnx(backup_root)
+    print(f"Reading: {upnx.name}")
+    df = parse_upnx(upnx)
+    print(f"Notes: {len(df)} (active)")
+    out = DATA_DIR / "upnote_text.csv"
+    df.write_csv(out)
+    print(f"Saved: {out}")
 
 
 def _print_done() -> None:

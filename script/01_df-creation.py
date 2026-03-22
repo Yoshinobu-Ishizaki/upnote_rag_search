@@ -1,8 +1,6 @@
 import argparse
-import glob
-import hashlib
-import os
-import re
+import gzip
+import json
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -12,112 +10,72 @@ import polars as pl
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
-def get_backup_path(cli_path: str | None) -> Path:
-    """Resolve backup path from CLI arg or config.ini."""
+def get_backup_root(cli_path):
     if cli_path:
         return Path(cli_path)
-    # Fallback to config.ini
-    try:
-        sys.path.insert(0, str(PROJECT_ROOT))
-        from src.config import get_backup_path as _cfg_path
-
-        return _cfg_path()
-    except Exception:
-        return PROJECT_ROOT / "UpNote" / "General Space"
+    sys.path.insert(0, str(PROJECT_ROOT))
+    from src.config import get_backup_path
+    return get_backup_path()
 
 
-def convtxt(path: Path):
-    update_dt = ""
-    create_dt = ""
-    cat_mode = False
-    isheader = True
-    categories = []
-    bdytxt = []
-    tags = []
+def find_latest_upnx(backup_root):
+    files = sorted((backup_root / "data").glob("*.upnx"))
+    if not files:
+        raise FileNotFoundError(f"No .upnx in {backup_root}/data")
+    return files[-1]
 
-    with open(path, "r", encoding="utf-8") as f:
-        txt = f.readlines()
 
-    for i, line in enumerate(txt):
-        if i > 0:
-            s = line.rstrip()
-            if s.startswith("date:"):
-                s2 = s.replace("date: ", "")
-                update_dt = datetime.strptime(s2, "%Y-%m-%d %H:%M:%S")
-            elif s.startswith("created: "):
-                s2 = s.replace("created: ", "")
-                create_dt = datetime.strptime(s2, "%Y-%m-%d %H:%M:%S")
-            elif s.startswith("categories:"):
-                cat_mode = True
-            elif s == "---":
-                isheader = False
-                cat_mode = False
+def parse_upnx(upnx_path):
+    notebooks, organizers, notes = {}, [], []
+    with gzip.open(upnx_path, "rb") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line == b"version:2":
                 continue
-            else:
-                if cat_mode:
-                    s2 = re.sub(r"^- ", "", s)
-                    categories.append(s2)
+            obj = json.loads(line)
+            t, d = obj["type"], obj["data"]
+            if t == "notebooks":
+                notebooks[d["id"]] = d.get("title", "")
+            elif t == "organizers" and not d.get("deleted"):
+                if d.get("noteId") and d.get("notebookId"):
+                    organizers.append(d)
+            elif t == "notes":
+                notes.append(d)
 
-            if not isheader:
-                if bool(re.match(r"#+ ", s)):
-                    s2 = re.sub(r"#+ ", "", s)
-                    bdytxt.append(s2)
-                elif bool(re.match(r"^[\s\*]+$", s)):
-                    bdytxt.append("")
-                elif bool(re.findall(r"#\w+", s)):
-                    for m in re.findall(r"#\w+", s):
-                        s2 = re.sub(r"^#", "", m)
-                        if not s2.isdigit():
-                            tags.append(s2)
-                else:
-                    bdytxt.append(s)
+    note_to_nb = {}
+    for org in organizers:
+        nid = org["noteId"]
+        if nid not in note_to_nb:
+            note_to_nb[nid] = notebooks.get(org["notebookId"], "")
 
-    cat_str = "|".join(categories)
-    contents = "\n".join(bdytxt)
-    tags_str = "|".join(tags)
+    rows = []
+    for d in notes:
+        if d.get("trashed") or d.get("deleted"):
+            continue
+        doc_id = d["id"]
+        title = d.get("title") or ""
+        text = d.get("text") or ""
+        update_dt = datetime.fromtimestamp(d["updatedAt"] / 1000) if d.get("updatedAt") else ""
+        create_dt = datetime.fromtimestamp(d["createdAt"] / 1000) if d.get("createdAt") else ""
+        category = note_to_nb.get(doc_id, "")
+        tags = "|".join(d.get("tagLinks", {}).get("__value__", []))
+        contents = (title + "\n" + text).strip()
+        rows.append([doc_id, title, update_dt, create_dt, category, tags, contents])
 
-    fpath = path.name
-
-    sha1 = hashlib.sha1()
-    sha1.update(fpath.encode("utf-8"))
-    doc_id = sha1.hexdigest()
-
-    yield [doc_id, fpath, update_dt, create_dt, cat_str, tags_str, contents]
+    return pl.DataFrame(rows, schema=["id", "fpath", "update", "created", "category", "tags", "contents"], orient="row")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Create text dataframe from UpNote markdown files")
-    parser.add_argument("--path", type=str, help="Path to UpNote backup folder")
+    parser = argparse.ArgumentParser(description="Create text dataframe from UpNote .upnx backup")
+    parser.add_argument("--path", type=str, help="Path to UpNote backup root (folder containing data/)")
     args = parser.parse_args()
 
-    upnote_path = get_backup_path(args.path)
-    print(f"Backup path: {upnote_path}")
-
-    if not upnote_path.exists():
-        print(f"Error: path does not exist: {upnote_path}")
-        sys.exit(1)
-
-    files = list(upnote_path.glob("*.md"))
-    maxi = len(files)
-    print(f"Found {maxi} markdown files")
-
-    alldata = []
-    for i, f in enumerate(files):
-        for output in convtxt(f):
-            alldata.append(output)
-
-        if (i % 100) == 0:
-            print(f"\x1b[2K\r{i}/{maxi}: {f.name}", end="\r")
-
-    print(f"\x1b[2K\rProcessed {maxi} files")
-
-    dfm = pl.DataFrame(
-        alldata,
-        schema=["id", "fpath", "update", "created", "category", "tags", "contents"],
-        orient="row",
-    )
-
-    out_path = PROJECT_ROOT / "data" / "upnote_text.csv"
-    out_path.parent.mkdir(exist_ok=True)
-    dfm.write_csv(out_path)
-    print(f"Saved: {out_path} ({len(dfm)} rows)")
+    backup_root = get_backup_root(args.path)
+    upnx = find_latest_upnx(backup_root)
+    print(f"Reading: {upnx.name}")
+    df = parse_upnx(upnx)
+    print(f"Notes: {len(df)} (active)")
+    out = PROJECT_ROOT / "data" / "upnote_text.csv"
+    out.parent.mkdir(exist_ok=True)
+    df.write_csv(out)
+    print(f"Saved: {out}")

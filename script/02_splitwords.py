@@ -55,9 +55,8 @@ if __name__ == "__main__":
     # dict = sudachipy.Dictionary(config_path="../sudachi/sudachi.json")
     dict = sudachipy.Dictionary()
     tokenizer = dict.create()
-    dfm2 = dfm.with_columns([
-        pl.col("contents").map_elements(strtrans_text).alias("tokens")
-    ])
+    tokens_list = [strtrans_text(s) for s in dfm["contents"].to_list()]
+    dfm2 = dfm.with_columns(pl.Series("tokens", tokens_list))
 
     dfm2.select(pl.exclude("contents")).write_csv("data/upnote_text_split.csv")
 

@@ -1,0 +1,5 @@
+- Always use uv to run python script.
+- Manage this project with uv.
+- When running app.py, you should calll `uv run strealmlit run app.py`
+- Always plan first before editting files.
+- If there is TODO.md, read it and tackle with them one by one.

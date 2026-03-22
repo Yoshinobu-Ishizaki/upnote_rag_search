@@ -38,7 +38,7 @@ def _load_split() -> pl.DataFrame:
 
 @st.cache_data
 def _load_text() -> pl.DataFrame:
-    return pl.read_csv(DATA_DIR / "upnote_text.csv").select(["id", "fpath", "contents"])
+    return pl.read_csv(DATA_DIR / "upnote_text.csv").select(["id", "fpath", "created", "category", "tags", "contents"])
 
 
 @st.cache_resource
@@ -146,7 +146,7 @@ with st.spinner("検索中..."):
     result_ids = [doc_id for doc_id, _ in ranked]
 
     text_lookup = {
-        row["id"]: (row["fpath"], row["contents"] or "")
+        row["id"]: (row["fpath"], row["contents"] or "", row["created"], row["category"], row["tags"])
         for row in text_df.iter_rows(named=True)
     }
 
@@ -154,7 +154,7 @@ with st.spinner("検索中..."):
     for doc_id in result_ids:
         if doc_id not in text_lookup:
             continue
-        fpath, contents = text_lookup[doc_id]
+        fpath, contents, *_ = text_lookup[doc_id]
         if context_char_count + len(contents) > max_chars:
             break
         context_parts.append(f"--- {fpath} ---\n{contents}")
@@ -196,9 +196,19 @@ with st.expander(f"参照ノート ({len(included_ids)} 件)", expanded=False):
     for doc_id in included_ids:
         if doc_id not in text_lookup:
             continue
-        fpath, contents = text_lookup[doc_id]
+        fpath, contents, created, category, tags = text_lookup[doc_id]
         score = rrf_score_map.get(doc_id, 0.0)
+        meta_parts = []
+        if created:
+            meta_parts.append(f"📅 {created}")
+        if category:
+            meta_parts.append(f"📁 {category}")
+        if tags:
+            meta_parts.append(f"🏷 {tags}")
+        meta_str = " &nbsp;|&nbsp; ".join(meta_parts)
         st.markdown(f"**{fpath}** &nbsp; `RRF: {score:.4f}`")
+        if meta_str:
+            st.caption(meta_str, unsafe_allow_html=True)
         preview = contents[:500].replace("\n", " ") if contents else ""
         st.caption(preview + ("..." if len(contents) > 500 else ""))
         st.divider()

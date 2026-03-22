@@ -54,7 +54,6 @@ python preprocess.py --path "D:/backup/UpNote/General Space"
 
 | ページ | 機能 |
 |--------|------|
-| **1_Keyword_Search** | BM25キーワード検索（高速） |
 | **2_RAG_Search** | ハイブリッド検索 + Claude AI 回答生成 |
 | **3_Settings** | フォルダパス・API キー設定 |
 """)

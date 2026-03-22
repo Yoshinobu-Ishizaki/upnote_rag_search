@@ -15,7 +15,6 @@ dependencies = [
     "rank-bm25",
     "numpy",
     "pandas",
-    "streamlit-aggrid==0.3.4",
 ]
 
 [dependency-groups]

@@ -1,5 +1,0 @@
-- Accept Ctrl-Enter for RAG search window, for invoking search function.
-- For RAG search result, show created date, notes's category and tags. 
-- Every upnote data has "created, category, tags" fields. Add filter buttons for these fields. The filter UI for "created" must be date picker. The created filter must be chooseable from "before" or "after" or "between" those specified date(s) where notes are created.The "category,tags" filter UI must be multi-selection list.
-- Handle with """warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is  deprecated and will be removed in a future release; use `dependency-groups.dev` instead """
-- 

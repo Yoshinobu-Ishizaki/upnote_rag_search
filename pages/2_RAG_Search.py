@@ -1,4 +1,5 @@
 """Hybrid RAG search page: BM25 + semantic search + Claude API answer generation."""
+import datetime
 import sys
 from pathlib import Path
 
@@ -86,6 +87,36 @@ top_k = get_top_k()
 # UI
 # ---------------------------------------------------------------------------
 
+with st.sidebar:
+    st.header("フィルター")
+
+    # Category
+    all_categories = sorted([c for c in text_df["category"].drop_nulls().unique().to_list() if c])
+    selected_categories = st.multiselect("カテゴリ", all_categories)
+
+    # Tags (pipe-delimited — explode to individual tags)
+    all_tags = sorted({
+        tag
+        for tags_str in text_df["tags"].drop_nulls().to_list()
+        if tags_str
+        for tag in tags_str.split("|")
+        if tag
+    })
+    selected_tags = st.multiselect("タグ", all_tags)
+
+    # Created date filter
+    st.subheader("作成日")
+    date_mode = st.selectbox("条件", ["すべて", "以前", "以降", "範囲"])
+    date_before = date_after = date_from = date_to = None
+    if date_mode == "以前":
+        date_before = st.date_input("日付")
+    elif date_mode == "以降":
+        date_after = st.date_input("日付")
+    elif date_mode == "範囲":
+        date_range = st.date_input("期間", value=(datetime.date(2010, 1, 1), datetime.date.today()))
+        if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
+            date_from, date_to = date_range
+
 with st.form("rag_search_form"):
     question = st.text_area(
         "質問を入力してください",
@@ -150,9 +181,35 @@ with st.spinner("検索中..."):
         for row in text_df.iter_rows(named=True)
     }
 
+    def _passes_filter(created, category, tags):
+        if selected_categories and category not in selected_categories:
+            return False
+        if selected_tags:
+            note_tags = set(tags.split("|")) if tags else set()
+            if not note_tags.intersection(selected_tags):
+                return False
+        if date_mode != "すべて" and created:
+            try:
+                note_date = datetime.date.fromisoformat(created[:10])
+                if date_mode == "以前" and date_before and note_date > date_before:
+                    return False
+                if date_mode == "以降" and date_after and note_date < date_after:
+                    return False
+                if date_mode == "範囲" and date_from and date_to and not (date_from <= note_date <= date_to):
+                    return False
+            except ValueError:
+                pass
+        return True
+
+    valid_ids = {
+        doc_id
+        for doc_id, (fpath, contents, created, category, tags) in text_lookup.items()
+        if _passes_filter(created, category, tags)
+    }
+
     included_ids = []
     for doc_id in result_ids:
-        if doc_id not in text_lookup:
+        if doc_id not in text_lookup or doc_id not in valid_ids:
             continue
         fpath, contents, *_ = text_lookup[doc_id]
         if context_char_count + len(contents) > max_chars:

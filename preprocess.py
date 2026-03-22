@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Preprocessing pipeline for UpNote Markdown Manager.
+"""Preprocessing pipeline for UpNote RAG Search.
 
 Run this script before starting the Streamlit app.
 For large note collections (25,000+), this may take several hours.
@@ -17,7 +17,7 @@ DATA_DIR = PROJECT_ROOT / "data"
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Preprocess UpNote markdown files for search"
+        description="Preprocess UpNote .upnx backup files for search"
     )
     parser.add_argument(
         "--path",
@@ -43,8 +43,8 @@ def main() -> None:
         _print_done()
         return
 
-    # Step 1: Markdown → upnote_text.csv
-    _print_step(1, "Creating text dataframe from markdown files")
+    # Step 1: .upnx → upnote_text.csv
+    _print_step(1, "Creating text dataframe from .upnx backup files")
     _create_dataframe(args.path)
 
     # Step 2: upnote_text.csv → upnote_text_split.csv (BM25 tokens)

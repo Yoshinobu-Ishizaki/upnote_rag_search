@@ -1,16 +1,16 @@
 import streamlit as st
 
 st.set_page_config(
-    page_title="UpNote Markdown Manager",
+    page_title="UpNote RAG Search",
     layout="wide",
 )
 
-st.title("UpNote Markdown Manager")
+st.title("UpNote RAG Search")
 
 st.markdown("""
 ## 使い方
 
-このアプリはUpNoteのバックアップMarkdownファイルを検索・照会するツールです。
+このアプリはUpNoteのバックアップ(.upnxファイル)を検索・照会するツールです。
 
 ---
 

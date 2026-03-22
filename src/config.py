@@ -1,4 +1,4 @@
-"""Configuration management for UpNote Markdown Manager.
+"""Configuration management for UpNote RAG Search.
 
 Reads from config.ini (settings) and .env (secrets).
 """

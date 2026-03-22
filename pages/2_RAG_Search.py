@@ -19,7 +19,7 @@ DATA_DIR = PROJECT_ROOT / "data"
 
 st.set_page_config(page_title="RAG Search", layout="wide")
 st.title("RAG Search")
-st.caption("ハイブリッド検索（BM25 + 意味検索）+ Claude AI による回答生成")
+st.caption(f"ハイブリッド検索（BM25 + 意味検索）+ Claude AI による回答生成 | モデル: `{get_claude_model()}`")
 
 # ---------------------------------------------------------------------------
 # Cached resources
@@ -189,7 +189,6 @@ with st.spinner("Claude に問い合わせ中..."):
 
 st.subheader("回答")
 st.markdown(message.content[0].text)
-st.caption(f"モデル: `{get_claude_model()}`")
 
 rrf_score_map = {doc_id: score for doc_id, score in ranked}
 

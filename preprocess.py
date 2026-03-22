@@ -132,40 +132,82 @@ def _create_embeddings() -> None:
     else:
         print("No cache found — encoding all notes from scratch.")
 
+    # Load checkpoint (partial results from a previous interrupted run)
+    ckpt_path = DATA_DIR / "embedding_checkpoint.npz"
+    ckpt: dict = {}  # id -> (update_ts, np.ndarray embedding)
+    if ckpt_path.exists():
+        data = np.load(ckpt_path, allow_pickle=True)
+        ckpt_ids_arr = data["ids"].tolist()
+        ckpt_ups_arr = data["updates"].tolist()
+        ckpt_embs_arr = data["embeddings"]  # shape (N, dim)
+        for cid, cup, cemb in zip(ckpt_ids_arr, ckpt_ups_arr, ckpt_embs_arr):
+            ckpt[cid] = (cup, cemb)
+        print(f"Checkpoint loaded: {len(ckpt)} partially-encoded notes resumed.")
+    else:
+        print("No checkpoint found.")
+
     # Classify notes
     new_indices, new_contents = [], []
     for i, (nid, nup) in enumerate(zip(ids, updates)):
-        if nid not in cache or cache[nid][0] != nup:
+        if nid in cache and cache[nid][0] == nup:
+            pass  # reuse from saved cache
+        elif nid in ckpt and ckpt[nid][0] == nup:
+            pass  # reuse from checkpoint
+        else:
             new_indices.append(i)
             new_contents.append(contents[i])
 
     n_cached = n_total - len(new_indices)
-    print(f"  {n_cached} notes reused from cache, {len(new_indices)} notes to encode.")
+    print(f"  {n_cached} notes reused from cache/checkpoint, {len(new_indices)} notes to encode.")
 
     # Encode only new notes
     dim = 768
     if new_contents:
         model = SentenceTransformer("paraphrase-multilingual-mpnet-base-v2")
         print(f"Encoding {len(new_contents)} notes...")
-        new_emb = model.encode(
-            new_contents, batch_size=64, show_progress_bar=True, normalize_embeddings=True,
-        ).astype("float32")
-        dim = new_emb.shape[1]
+
+        # Seed ckpt accumulator with already-loaded checkpoint data
+        ckpt_ids_list  = list(ckpt.keys())
+        ckpt_ups_list  = [ckpt[k][0] for k in ckpt_ids_list]
+        ckpt_embs_list = [ckpt[k][1] for k in ckpt_ids_list]
+
+        BATCH = 64
+        total_batches = (len(new_contents) + BATCH - 1) // BATCH
+        for b in range(total_batches):
+            batch_contents = new_contents[b * BATCH : (b + 1) * BATCH]
+            batch_indices  = new_indices [b * BATCH : (b + 1) * BATCH]
+            batch_emb = model.encode(
+                batch_contents, normalize_embeddings=True, show_progress_bar=False
+            ).astype("float32")
+            dim = batch_emb.shape[1]
+
+            for idx, emb in zip(batch_indices, batch_emb):
+                nid, nup = ids[idx], updates[idx]
+                ckpt[nid] = (nup, emb)
+                ckpt_ids_list.append(nid)
+                ckpt_ups_list.append(nup)
+                ckpt_embs_list.append(emb)
+
+            np.savez(
+                ckpt_path,
+                ids=ckpt_ids_list,
+                updates=ckpt_ups_list,
+                embeddings=np.array(ckpt_embs_list, dtype="float32"),
+            )
+            print(f"  Batch {b + 1}/{total_batches} done — checkpoint saved ({len(ckpt_ids_list)} notes).")
+
     else:
-        new_emb = np.empty((0, dim), dtype="float32")
         if old_embeddings is not None:
             dim = old_embeddings.shape[1]
-        print("All notes served from cache — skipping model load.")
+        print("All notes served from cache/checkpoint — skipping model load.")
 
     # Assemble in current CSV row order
     final_embeddings = np.empty((n_total, dim), dtype="float32")
-    new_ptr = 0
     for i, (nid, nup) in enumerate(zip(ids, updates)):
         if nid in cache and cache[nid][0] == nup:
             final_embeddings[i] = old_embeddings[cache[nid][1]]
         else:
-            final_embeddings[i] = new_emb[new_ptr]
-            new_ptr += 1
+            final_embeddings[i] = ckpt[nid][1]
 
     # Save outputs
     np.save(npy_path, final_embeddings)
@@ -179,6 +221,10 @@ def _create_embeddings() -> None:
 
     pl.DataFrame({"id": ids, "update": updates}).write_csv(meta_path)
     print(f"Saved: {meta_path}")
+
+    if ckpt_path.exists():
+        ckpt_path.unlink()
+        print("Checkpoint deleted (run complete).")
 
 
 if __name__ == "__main__":

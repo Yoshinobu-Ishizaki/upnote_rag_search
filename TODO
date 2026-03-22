@@ -1,4 +1,3 @@
-- Please show claude model in a RAG search window.
 - Accept Ctrl-Enter for RAG search window, for invoking search function.
 - For RAG search result, show created date, notes's category and tags. 
 - Every upnote data has "created, category, tags" fields. Add filter buttons for these fields. The filter UI for "created" must be date picker. The created filter must be chooseable from "before" or "after" or "between" those specified date(s) where notes are created.The "category,tags" filter UI must be multi-selection list.

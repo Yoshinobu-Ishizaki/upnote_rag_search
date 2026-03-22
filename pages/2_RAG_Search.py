@@ -189,6 +189,7 @@ with st.spinner("Claude に問い合わせ中..."):
 
 st.subheader("回答")
 st.markdown(message.content[0].text)
+st.caption(f"モデル: `{get_claude_model()}`")
 
 rrf_score_map = {doc_id: score for doc_id, score in ranked}
 

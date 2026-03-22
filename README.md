@@ -31,12 +31,18 @@ Launch the app and open the Settings page to set:
 
 Run the preprocessing pipeline to build the search index:
 
-    uv run python preprocess.py
+    uv run preprocess.py
 
 This will:
 1. Parse the `.upnx` file → `data/upnote_text.csv`
 2. Tokenize with Sudachi → `data/upnote_text_split.csv`
 3. Build FAISS semantic index → `data/faiss_index/`
+
+To rebuild only the embeddings/FAISS index (skipping steps 1 & 2), use:
+
+    uv run preprocess.py --embeddings-only
+
+This is useful if you interrupted a previous run — the script saves a checkpoint after each batch and resumes automatically.
 
 ### 4. Launch the app
 

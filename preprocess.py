@@ -92,30 +92,76 @@ def _create_embeddings() -> None:
     import numpy as np
     import polars as pl
 
-    model = SentenceTransformer("paraphrase-multilingual-mpnet-base-v2")
-
     df = pl.read_csv(DATA_DIR / "upnote_text.csv")
+    ids      = df["id"].to_list()
+    updates  = df["update"].to_list()
     contents = df["contents"].fill_null("").to_list()
-    print(f"Encoding {len(contents)} notes...")
+    n_total  = len(ids)
 
-    embeddings = model.encode(
-        contents,
-        batch_size=64,
-        show_progress_bar=True,
-        normalize_embeddings=True,
-    )
-    embeddings = embeddings.astype("float32")
+    # Load cache
+    meta_path = DATA_DIR / "embedding_meta.csv"
+    npy_path  = DATA_DIR / "embeddings.npy"
+    cache: dict = {}          # id -> (update_ts, old_row_idx)
+    old_embeddings = None
 
-    out_npy = DATA_DIR / "embeddings.npy"
-    np.save(out_npy, embeddings)
-    print(f"Saved: {out_npy}")
+    if meta_path.exists() and npy_path.exists():
+        meta_df = pl.read_csv(meta_path)
+        old_embeddings = np.load(npy_path)
+        for row_idx, (cid, cup) in enumerate(
+            zip(meta_df["id"].to_list(), meta_df["update"].to_list())
+        ):
+            cache[cid] = (cup, row_idx)
+        print(f"Cache loaded: {len(cache)} entries from previous run.")
+    else:
+        print("No cache found — encoding all notes from scratch.")
 
-    dim = embeddings.shape[1]
+    # Classify notes
+    new_indices, new_contents = [], []
+    for i, (nid, nup) in enumerate(zip(ids, updates)):
+        if nid not in cache or cache[nid][0] != nup:
+            new_indices.append(i)
+            new_contents.append(contents[i])
+
+    n_cached = n_total - len(new_indices)
+    print(f"  {n_cached} notes reused from cache, {len(new_indices)} notes to encode.")
+
+    # Encode only new notes
+    dim = 768
+    if new_contents:
+        model = SentenceTransformer("paraphrase-multilingual-mpnet-base-v2")
+        print(f"Encoding {len(new_contents)} notes...")
+        new_emb = model.encode(
+            new_contents, batch_size=64, show_progress_bar=True, normalize_embeddings=True,
+        ).astype("float32")
+        dim = new_emb.shape[1]
+    else:
+        new_emb = np.empty((0, dim), dtype="float32")
+        if old_embeddings is not None:
+            dim = old_embeddings.shape[1]
+        print("All notes served from cache — skipping model load.")
+
+    # Assemble in current CSV row order
+    final_embeddings = np.empty((n_total, dim), dtype="float32")
+    new_ptr = 0
+    for i, (nid, nup) in enumerate(zip(ids, updates)):
+        if nid in cache and cache[nid][0] == nup:
+            final_embeddings[i] = old_embeddings[cache[nid][1]]
+        else:
+            final_embeddings[i] = new_emb[new_ptr]
+            new_ptr += 1
+
+    # Save outputs
+    np.save(npy_path, final_embeddings)
+    print(f"Saved: {npy_path}")
+
     index = faiss.IndexFlatIP(dim)
-    index.add(embeddings)
+    index.add(final_embeddings)
     out_faiss = DATA_DIR / "faiss.index"
     faiss.write_index(index, str(out_faiss))
     print(f"Saved: {out_faiss}")
+
+    pl.DataFrame({"id": ids, "update": updates}).write_csv(meta_path)
+    print(f"Saved: {meta_path}")
 
 
 if __name__ == "__main__":

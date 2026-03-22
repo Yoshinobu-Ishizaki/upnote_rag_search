@@ -1,6 +1,3 @@
-1. We do not need keyword search functionality for this app anymore. Pls remove not used keyword search files and calls for them.
-
-2. Removed un-used files such as 01_df-createion.jl. Check if "mecab", "notebook" folders are still needed.
 
 3. Now this project reads upnote native backup file *.upnx instead of Markdown.
 
@@ -8,3 +5,5 @@
    - Remove non-used code files regarding markdown files.
    - Change this project's name from "upnote_md_mgr" to "upnote_rag_search". 
    - Change this project's github name from "upnote_md_mgr" to "upnote_rag_search".
+
+4. Update README.md

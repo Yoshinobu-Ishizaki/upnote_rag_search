@@ -1,7 +1,0 @@
-
-3. Now this project reads upnote native backup file *.upnx instead of Markdown.
-
-   - Correct any comments which tells about Markdown even the actual code uses upnx.
-   - Remove non-used code files regarding markdown files.
-   - Change this project's name from "upnote_md_mgr" to "upnote_rag_search". 
-   - Change this project's github name from "upnote_md_mgr" to "upnote_rag_search".

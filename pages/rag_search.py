@@ -129,133 +129,189 @@ with st.form("rag_search_form"):
     with col1:
         search_btn = st.form_submit_button("検索・回答生成", type="primary", use_container_width=True)
 
-if not search_btn or not question.strip():
+new_search = search_btn and bool(question.strip())
+has_results = "rag_results" in st.session_state
+
+if not new_search and not has_results:
     st.stop()
 
-api_key = get_api_key()
-if not api_key:
-    st.error(
-        "ANTHROPIC_API_KEY が設定されていません。**Settings** ページで API キーを設定してください。"
-    )
-    st.stop()
+if new_search:
+    if "rag_results" in st.session_state:
+        del st.session_state["rag_results"]
 
-with st.spinner("検索中..."):
-    tokenizer = _tokenizer()
-    query_tokens = tokenize_text(question, tokenizer)
-
-    # BM25 search
-    scores_bm25 = bm25.get_scores(query_tokens)
-    id_list_bm25 = split_df["id"].to_list()
-    scored_bm25 = sorted(
-        [(id_list_bm25[i], scores_bm25[i]) for i in range(len(scores_bm25)) if scores_bm25[i] > 0],
-        key=lambda x: x[1],
-        reverse=True,
-    )
-    bm25_ids = [doc_id for doc_id, _ in scored_bm25[: top_k * 2]]
-
-    # Semantic search (if available)
-    if faiss_ok:
-        query_embedding = model.encode(
-            [question], normalize_embeddings=True
+    api_key = get_api_key()
+    if not api_key:
+        st.error(
+            "ANTHROPIC_API_KEY が設定されていません。**Settings** ページで API キーを設定してください。"
         )
-        semantic_ids = semantic_search(faiss_index, id_list, query_embedding, top_k=top_k * 2)
-    else:
-        semantic_ids = []
+        st.stop()
 
-    # Hybrid RRF fusion
-    if semantic_ids:
-        ranked = reciprocal_rank_fusion(bm25_ids, semantic_ids)[:top_k]
-    else:
-        ranked = [(doc_id, 0.0) for doc_id in bm25_ids[:top_k]]
+    with st.spinner("検索中..."):
+        tokenizer = _tokenizer()
+        query_tokens = tokenize_text(question, tokenizer)
 
-    if not ranked:
-        if not filters_active:
-            st.warning("関連するノートが見つかりませんでした。キーワードを変えてお試しください。")
-            st.stop()
-        # else: filters active → fall through to filter-based fallback below
-        ranked = []  # ensure ranked is defined for rrf_score_map later
+        # BM25 search
+        scores_bm25 = bm25.get_scores(query_tokens)
+        id_list_bm25 = split_df["id"].to_list()
+        scored_bm25 = sorted(
+            [(id_list_bm25[i], scores_bm25[i]) for i in range(len(scores_bm25)) if scores_bm25[i] > 0],
+            key=lambda x: x[1],
+            reverse=True,
+        )
+        bm25_ids = [doc_id for doc_id, _ in scored_bm25[: top_k * 2]]
 
-    filters_active = bool(selected_categories or selected_tags or date_mode != "すべて")
-
-    # Build context
-    max_chars = get_max_context_chars()
-    context_parts = []
-    context_char_count = 0
-    result_ids = [doc_id for doc_id, _ in ranked]
-
-    text_lookup = {
-        row["id"]: (row["fpath"], row["contents"] or "", row["created"], row["category"], row["tags"])
-        for row in text_df.iter_rows(named=True)
-    }
-
-    def _passes_filter(created, category, tags):
-        def _cat_matches():
-            return any(
-                category == sel or category.startswith(sel + ":")
-                for sel in selected_categories
+        # Semantic search (if available)
+        if faiss_ok:
+            query_embedding = model.encode(
+                [question], normalize_embeddings=True
             )
-        if selected_categories and not _cat_matches():
-            return False
-        if selected_tags:
-            note_tags = set(tags.split("|")) if tags else set()
-            if not note_tags.intersection(selected_tags):
+            semantic_ids = semantic_search(faiss_index, id_list, query_embedding, top_k=top_k * 2)
+        else:
+            semantic_ids = []
+
+        # Hybrid RRF fusion
+        if semantic_ids:
+            ranked = reciprocal_rank_fusion(bm25_ids, semantic_ids)[:top_k]
+        else:
+            ranked = [(doc_id, 0.0) for doc_id in bm25_ids[:top_k]]
+
+        filters_active = bool(selected_categories or selected_tags or date_mode != "すべて")
+
+        if not ranked:
+            if not filters_active:
+                st.warning("関連するノートが見つかりませんでした。キーワードを変えてお試しください。")
+                st.stop()
+            ranked = []
+
+        # Build context
+        max_chars = get_max_context_chars()
+        context_parts = []
+        context_char_count = 0
+        result_ids = [doc_id for doc_id, _ in ranked]
+
+        text_lookup = {
+            row["id"]: (row["fpath"], row["contents"] or "", row["created"], row["category"], row["tags"])
+            for row in text_df.iter_rows(named=True)
+        }
+
+        def _passes_filter(created, category, tags):
+            def _cat_matches():
+                return any(
+                    category == sel or category.startswith(sel + ":")
+                    for sel in selected_categories
+                )
+            if selected_categories and not _cat_matches():
                 return False
-        if date_mode != "すべて" and created:
-            try:
-                note_date = datetime.date.fromisoformat(created[:10])
-                if date_mode == "以前" and date_before and note_date > date_before:
+            if selected_tags:
+                note_tags = set(tags.split("|")) if tags else set()
+                if not note_tags.intersection(selected_tags):
                     return False
-                if date_mode == "以降" and date_after and note_date < date_after:
-                    return False
-                if date_mode == "範囲" and date_from and date_to and not (date_from <= note_date <= date_to):
-                    return False
-            except ValueError:
-                pass
-        return True
+            if date_mode != "すべて" and created:
+                try:
+                    note_date = datetime.date.fromisoformat(created[:10])
+                    if date_mode == "以前" and date_before and note_date > date_before:
+                        return False
+                    if date_mode == "以降" and date_after and note_date < date_after:
+                        return False
+                    if date_mode == "範囲" and date_from and date_to and not (date_from <= note_date <= date_to):
+                        return False
+                except ValueError:
+                    pass
+            return True
 
-    valid_ids = {
-        doc_id
-        for doc_id, (fpath, contents, created, category, tags) in text_lookup.items()
-        if _passes_filter(created, category, tags)
-    }
+        valid_ids = {
+            doc_id
+            for doc_id, (fpath, contents, created, category, tags) in text_lookup.items()
+            if _passes_filter(created, category, tags)
+        }
 
-    included_ids = []
-    for doc_id in result_ids:
-        if doc_id not in text_lookup or doc_id not in valid_ids:
-            continue
-        fpath, contents, *_ = text_lookup[doc_id]
-        if not contents:
-            continue
-        if context_char_count + len(contents) > max_chars:
-            break
-        context_parts.append(f"--- {fpath} ---\n{contents}")
-        context_char_count += len(contents)
-        included_ids.append(doc_id)
-
-    context = "\n\n".join(context_parts)
-
-    # Fallback: if search results yielded no context but filters are active,
-    # include ALL documents that pass the filter.
-    # Claude's context window is ~200k tokens ≈ 750k chars; warn if truncated.
-    CLAUDE_CONTEXT_LIMIT_CHARS = 750_000
-
-    fallback_truncated = False
-    if not included_ids and filters_active and valid_ids:
-        for row in text_df.iter_rows(named=True):
-            doc_id = row["id"]
-            if doc_id not in valid_ids:
+        included_ids = []
+        for doc_id in result_ids:
+            if doc_id not in text_lookup or doc_id not in valid_ids:
                 continue
-            contents = row["contents"] or ""
+            fpath, contents, *_ = text_lookup[doc_id]
             if not contents:
                 continue
-            fpath = row["fpath"]
-            if context_char_count + len(contents) > CLAUDE_CONTEXT_LIMIT_CHARS:
-                fallback_truncated = True
+            if context_char_count + len(contents) > max_chars:
                 break
             context_parts.append(f"--- {fpath} ---\n{contents}")
             context_char_count += len(contents)
             included_ids.append(doc_id)
+
         context = "\n\n".join(context_parts)
+
+        # Fallback: if search results yielded no context but filters are active,
+        # include ALL documents that pass the filter.
+        # Claude's context window is ~200k tokens ≈ 750k chars; warn if truncated.
+        CLAUDE_CONTEXT_LIMIT_CHARS = 750_000
+
+        fallback_truncated = False
+        if not included_ids and filters_active and valid_ids:
+            for row in text_df.iter_rows(named=True):
+                doc_id = row["id"]
+                if doc_id not in valid_ids:
+                    continue
+                contents = row["contents"] or ""
+                if not contents:
+                    continue
+                fpath = row["fpath"]
+                if context_char_count + len(contents) > CLAUDE_CONTEXT_LIMIT_CHARS:
+                    fallback_truncated = True
+                    break
+                context_parts.append(f"--- {fpath} ---\n{contents}")
+                context_char_count += len(contents)
+                included_ids.append(doc_id)
+            context = "\n\n".join(context_parts)
+
+    with st.spinner("Claude に問い合わせ中..."):
+        import anthropic
+
+        client = anthropic.Anthropic(api_key=api_key)
+        message = client.messages.create(
+            model=get_claude_model(),
+            max_tokens=2048,
+            system=(
+                "提供されたノートのコンテキストのみを使って質問に答えてください。"
+                "コンテキストに答えが見つからない場合はその旨を伝えてください。"
+                "質問と同じ言語で回答してください。"
+            ),
+            messages=[
+                {
+                    "role": "user",
+                    "content": f"コンテキスト:\n\n{context}\n\n質問: {question}",
+                }
+            ],
+        )
+
+    rrf_score_map = {doc_id: score for doc_id, score in ranked}
+
+    rows = []
+    for doc_id in included_ids:
+        if doc_id not in text_lookup:
+            continue
+        fpath, contents, created, category, tags = text_lookup[doc_id]
+        score = rrf_score_map.get(doc_id, 0.0)
+        preview = (contents[:300] + "...") if contents and len(contents) > 300 else (contents or "")
+        rows.append({
+            "ノート": fpath,
+            "カテゴリ": category or "",
+            "作成日": created[:10] if created else "",
+            "タグ": tags or "",
+            "内容プレビュー": preview,
+            "RRFスコア": round(score, 4),
+        })
+
+    result_df = pl.DataFrame(rows) if rows else pl.DataFrame(schema={
+        "ノート": pl.Utf8, "カテゴリ": pl.Utf8, "作成日": pl.Utf8,
+        "タグ": pl.Utf8, "内容プレビュー": pl.Utf8, "RRFスコア": pl.Float64,
+    })
+
+    st.session_state["rag_results"] = {
+        "answer": message.content[0].text,
+        "result_df": result_df,
+        "included_ids": included_ids,
+        "fallback_truncated": fallback_truncated,
+    }
 
     if fallback_truncated:
         st.warning(
@@ -263,55 +319,17 @@ with st.spinner("検索中..."):
             "一部のノートはコンテキストから除外されました。"
         )
 
-with st.spinner("Claude に問い合わせ中..."):
-    import anthropic
-
-    client = anthropic.Anthropic(api_key=api_key)
-    message = client.messages.create(
-        model=get_claude_model(),
-        max_tokens=2048,
-        system=(
-            "提供されたノートのコンテキストのみを使って質問に答えてください。"
-            "コンテキストに答えが見つからない場合はその旨を伝えてください。"
-            "質問と同じ言語で回答してください。"
-        ),
-        messages=[
-            {
-                "role": "user",
-                "content": f"コンテキスト:\n\n{context}\n\n質問: {question}",
-            }
-        ],
-    )
-
 # ---------------------------------------------------------------------------
 # Display results
 # ---------------------------------------------------------------------------
 
+res = st.session_state["rag_results"]
+
 st.subheader("回答")
-st.markdown(message.content[0].text)
+st.markdown(res["answer"])
 
-rrf_score_map = {doc_id: score for doc_id, score in ranked}
-
-rows = []
-for doc_id in included_ids:
-    if doc_id not in text_lookup:
-        continue
-    fpath, contents, created, category, tags = text_lookup[doc_id]
-    score = rrf_score_map.get(doc_id, 0.0)
-    preview = (contents[:300] + "...") if contents and len(contents) > 300 else (contents or "")
-    rows.append({
-        "ノート": fpath,
-        "カテゴリ": category or "",
-        "作成日": created[:10] if created else "",
-        "タグ": tags or "",
-        "内容プレビュー": preview,
-        "RRFスコア": round(score, 4),
-    })
-
-result_df = pl.DataFrame(rows) if rows else pl.DataFrame(schema={
-    "ノート": pl.Utf8, "カテゴリ": pl.Utf8, "作成日": pl.Utf8,
-    "タグ": pl.Utf8, "内容プレビュー": pl.Utf8, "RRFスコア": pl.Float64,
-})
+result_df = res["result_df"]
+included_ids = res["included_ids"]
 
 st.subheader(f"参照ノート ({len(included_ids)} 件)")
 

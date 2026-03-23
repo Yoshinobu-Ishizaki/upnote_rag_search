@@ -10,6 +10,8 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from st_aggrid import AgGrid, ColumnsAutoSizeMode, GridOptionsBuilder
+
 from src.bm25_search import build_bm25, load_split_data
 from src.config import get_api_key, get_claude_model, get_max_context_chars, get_top_k
 from src.embedding import get_embedding_model, load_index, semantic_search
@@ -81,8 +83,6 @@ if faiss_ok:
     faiss_index, id_list = _faiss_index()
     model = get_embedding_model()
 
-top_k = get_top_k()
-
 # ---------------------------------------------------------------------------
 # UI
 # ---------------------------------------------------------------------------
@@ -116,6 +116,9 @@ with st.sidebar:
         date_range = st.date_input("期間", value=(datetime.date(2010, 1, 1), datetime.date.today()))
         if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
             date_from, date_to = date_range
+
+    st.subheader("検索設定")
+    top_k = st.number_input("参照ノート数", min_value=1, max_value=100, value=get_top_k(), step=1)
 
 with st.form("rag_search_form"):
     question = st.text_area(
@@ -290,23 +293,48 @@ st.markdown(message.content[0].text)
 
 rrf_score_map = {doc_id: score for doc_id, score in ranked}
 
-with st.expander(f"参照ノート ({len(included_ids)} 件)", expanded=False):
-    for doc_id in included_ids:
-        if doc_id not in text_lookup:
-            continue
-        fpath, contents, created, category, tags = text_lookup[doc_id]
-        score = rrf_score_map.get(doc_id, 0.0)
-        meta_parts = []
-        if created:
-            meta_parts.append(f"📅 {created}")
-        if category:
-            meta_parts.append(f"📁 {category}")
-        if tags:
-            meta_parts.append(f"🏷 {tags}")
-        meta_str = " &nbsp;|&nbsp; ".join(meta_parts)
-        st.markdown(f"**{fpath}** &nbsp; `RRF: {score:.4f}`")
-        if meta_str:
-            st.caption(meta_str, unsafe_allow_html=True)
-        preview = contents[:500].replace("\n", " ") if contents else ""
-        st.caption(preview + ("..." if len(contents) > 500 else ""))
-        st.divider()
+rows = []
+for doc_id in included_ids:
+    if doc_id not in text_lookup:
+        continue
+    fpath, contents, created, category, tags = text_lookup[doc_id]
+    score = rrf_score_map.get(doc_id, 0.0)
+    preview = (contents[:300] + "...") if contents and len(contents) > 300 else (contents or "")
+    rows.append({
+        "ノート": fpath,
+        "カテゴリ": category or "",
+        "作成日": created[:10] if created else "",
+        "タグ": tags or "",
+        "内容プレビュー": preview,
+        "RRFスコア": round(score, 4),
+    })
+
+result_df = pl.DataFrame(rows) if rows else pl.DataFrame(schema={
+    "ノート": pl.Utf8, "カテゴリ": pl.Utf8, "作成日": pl.Utf8,
+    "タグ": pl.Utf8, "内容プレビュー": pl.Utf8, "RRFスコア": pl.Float64,
+})
+
+st.subheader(f"参照ノート ({len(included_ids)} 件)")
+
+gb = GridOptionsBuilder.from_dataframe(result_df.to_pandas())
+gb.configure_default_column(
+    filter=True,
+    sortable=True,
+    resizable=True,
+    wrapText=True,
+    autoHeight=True,
+)
+gb.configure_column("内容プレビュー", flex=3)
+gb.configure_column("ノート", flex=2)
+gb.configure_column("カテゴリ", flex=2)
+gb.configure_column("作成日", flex=1)
+gb.configure_column("タグ", flex=2)
+gb.configure_column("RRFスコア", flex=1, type=["numericColumn"], valueFormatter="x.toFixed(4)")
+
+AgGrid(
+    result_df.to_pandas(),
+    gridOptions=gb.build(),
+    use_container_width=True,
+    columns_auto_size_mode=ColumnsAutoSizeMode.FIT_CONTENTS,
+    height=400,
+)

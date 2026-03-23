@@ -90,13 +90,15 @@ def _print_step(n: int, description: str) -> None:
 
 def _tokenize_for_bm25() -> None:
     import polars as pl
+    from tqdm import tqdm
     from src.tokenizer import create_tokenizer, tokenize_text, tokens_to_string
 
     df = pl.read_csv(DATA_DIR / "upnote_text.csv")
     tokenizer = create_tokenizer()
+    contents = df["contents"].fill_null("").to_list()
     tokens_list = [
         tokens_to_string(tokenize_text(s, tokenizer))
-        for s in df["contents"].fill_null("").to_list()
+        for s in tqdm(contents, desc="Tokenizing", unit="note")
     ]
     df.with_columns(pl.Series("tokens", tokens_list)) \
       .select(pl.exclude("contents")) \

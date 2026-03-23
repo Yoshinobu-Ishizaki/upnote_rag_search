@@ -20,7 +20,6 @@ from src.tokenizer import create_tokenizer, tokenize_text
 
 DATA_DIR = PROJECT_ROOT / "data"
 
-st.set_page_config(page_title="RAG Search", layout="wide")
 st.title("RAG Search")
 st.caption(f"ハイブリッド検索（BM25 + 意味検索）+ Claude AI による回答生成 | モデル: `{get_claude_model()}`")
 
@@ -136,7 +135,7 @@ if not search_btn or not question.strip():
 api_key = get_api_key()
 if not api_key:
     st.error(
-        "ANTHROPIC_API_KEY が設定されていません。**3_Settings** ページで API キーを設定してください。"
+        "ANTHROPIC_API_KEY が設定されていません。**Settings** ページで API キーを設定してください。"
     )
     st.stop()
 

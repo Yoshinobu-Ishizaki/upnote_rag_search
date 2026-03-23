@@ -94,15 +94,53 @@ def _tokenize_for_bm25() -> None:
     from src.tokenizer import create_tokenizer, tokenize_text, tokens_to_string
 
     df = pl.read_csv(DATA_DIR / "upnote_text.csv")
-    tokenizer = create_tokenizer()
+    ids      = df["id"].to_list()
+    updates  = df["update"].to_list()
     contents = df["contents"].fill_null("").to_list()
-    tokens_list = [
-        tokens_to_string(tokenize_text(s, tokenizer))
-        for s in tqdm(contents, desc="Tokenizing", unit="note")
-    ]
+    n_total  = len(ids)
+
+    # Load cache from previous run
+    split_path = DATA_DIR / "upnote_text_split.csv"
+    cache: dict = {}  # id -> (update, tokens_str)
+    if split_path.exists():
+        cached_df = pl.read_csv(split_path)
+        for cid, cup, ctok in zip(
+            cached_df["id"].to_list(),
+            cached_df["update"].to_list(),
+            cached_df["tokens"].fill_null("").to_list(),
+        ):
+            cache[cid] = (cup, ctok)
+        print(f"Cache loaded: {len(cache)} entries from previous run.")
+    else:
+        print("No cache found — tokenizing all notes from scratch.")
+
+    # Classify notes
+    new_indices = []
+    for i, (nid, nup) in enumerate(zip(ids, updates)):
+        if nid not in cache or cache[nid][0] != nup:
+            new_indices.append(i)
+
+    n_cached = n_total - len(new_indices)
+    print(f"  {n_cached} notes reused from cache, {len(new_indices)} notes to tokenize.")
+
+    # Tokenize only new/changed notes
+    new_tokens: dict[int, str] = {}
+    if new_indices:
+        tokenizer = create_tokenizer()
+        for i in tqdm(new_indices, desc="Tokenizing", unit="note"):
+            new_tokens[i] = tokens_to_string(tokenize_text(contents[i], tokenizer))
+
+    # Assemble in current CSV row order
+    tokens_list = []
+    for i, (nid, nup) in enumerate(zip(ids, updates)):
+        if nid in cache and cache[nid][0] == nup:
+            tokens_list.append(cache[nid][1])
+        else:
+            tokens_list.append(new_tokens[i])
+
     df.with_columns(pl.Series("tokens", tokens_list)) \
       .select(pl.exclude("contents")) \
-      .write_csv(DATA_DIR / "upnote_text_split.csv")
+      .write_csv(split_path)
 
 
 def _create_embeddings() -> None:

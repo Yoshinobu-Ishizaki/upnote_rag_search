@@ -341,6 +341,7 @@ gb.configure_default_column(
     wrapText=True,
     autoHeight=True,
 )
+gb.configure_grid_options(enableCellTextSelection=True)
 gb.configure_column("内容プレビュー", width=500)
 gb.configure_column("ノート", width=180)
 gb.configure_column("カテゴリ", width=100)

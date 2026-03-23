@@ -10,7 +10,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from st_aggrid import AgGrid, ColumnsAutoSizeMode, GridOptionsBuilder
+from st_aggrid import AgGrid, GridOptionsBuilder
 
 from src.bm25_search import build_bm25, load_split_data
 from src.config import get_api_key, get_claude_model, get_max_context_chars, get_top_k
@@ -324,17 +324,17 @@ gb.configure_default_column(
     wrapText=True,
     autoHeight=True,
 )
-gb.configure_column("内容プレビュー", flex=3)
-gb.configure_column("ノート", flex=2)
-gb.configure_column("カテゴリ", flex=2)
-gb.configure_column("作成日", flex=1)
-gb.configure_column("タグ", flex=2)
-gb.configure_column("RRFスコア", flex=1, type=["numericColumn"], valueFormatter="x.toFixed(4)")
+gb.configure_column("内容プレビュー", width=500)
+gb.configure_column("ノート", width=180)
+gb.configure_column("カテゴリ", width=100)
+gb.configure_column("作成日", width=100)
+gb.configure_column("タグ", width=100)
+gb.configure_column("RRFスコア", width=90, type=["numericColumn"], valueFormatter="x.toFixed(4)")
 
 AgGrid(
     result_df.to_pandas(),
     gridOptions=gb.build(),
     width="stretch",
-    columns_auto_size_mode=ColumnsAutoSizeMode.FIT_CONTENTS,
     height=400,
+    fit_columns_on_grid_load=True,
 )

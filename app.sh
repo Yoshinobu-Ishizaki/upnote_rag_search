@@ -1,2 +1,2 @@
 #!/bin/bash
-source .venv/bin/activate && streamlit run app.py
+uv run python -m streamlit run app.py

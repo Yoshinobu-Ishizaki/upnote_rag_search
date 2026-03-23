@@ -334,7 +334,7 @@ gb.configure_column("RRFスコア", flex=1, type=["numericColumn"], valueFormatt
 AgGrid(
     result_df.to_pandas(),
     gridOptions=gb.build(),
-    use_container_width=True,
+    width="stretch",
     columns_auto_size_mode=ColumnsAutoSizeMode.FIT_CONTENTS,
     height=400,
 )

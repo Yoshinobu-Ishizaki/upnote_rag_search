@@ -203,16 +203,16 @@ def _create_embeddings() -> None:
     # Encode only new notes
     dim = 768
     if new_contents:
+        BATCH = 64
+        total_batches = (len(new_contents) + BATCH - 1) // BATCH
+        print(f"  Loading model (this may take a while)...")
         model = SentenceTransformer("paraphrase-multilingual-mpnet-base-v2")
-        print(f"Encoding {len(new_contents)} notes...")
+        print(f"  Model loaded. Encoding {len(new_contents)} notes in {total_batches} batches of up to {BATCH}...")
 
         # Seed ckpt accumulator with already-loaded checkpoint data
         ckpt_ids_list  = list(ckpt.keys())
         ckpt_ups_list  = [ckpt[k][0] for k in ckpt_ids_list]
         ckpt_embs_list = [ckpt[k][1] for k in ckpt_ids_list]
-
-        BATCH = 64
-        total_batches = (len(new_contents) + BATCH - 1) // BATCH
         for b in range(total_batches):
             batch_contents = new_contents[b * BATCH : (b + 1) * BATCH]
             batch_indices  = new_indices [b * BATCH : (b + 1) * BATCH]
@@ -242,6 +242,7 @@ def _create_embeddings() -> None:
         print("All notes served from cache/checkpoint — skipping model load.")
 
     # Assemble in current CSV row order
+    print("  Assembling final embedding matrix...")
     final_embeddings = np.empty((n_total, dim), dtype="float32")
     for i, (nid, nup) in enumerate(zip(ids, updates)):
         if nid in cache and cache[nid][0] == nup:
@@ -250,12 +251,15 @@ def _create_embeddings() -> None:
             final_embeddings[i] = ckpt[nid][1]
 
     # Save outputs
+    print(f"  Saving embeddings ({n_total} × {dim})...")
     np.save(npy_path, final_embeddings)
     print(f"Saved: {npy_path}")
 
+    print("  Building FAISS index...")
     index = faiss.IndexFlatIP(dim)
     index.add(final_embeddings)
     out_faiss = DATA_DIR / "faiss.index"
+    print("  Saving FAISS index...")
     faiss.write_index(index, str(out_faiss))
     print(f"Saved: {out_faiss}")
 

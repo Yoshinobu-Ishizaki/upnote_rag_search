@@ -63,6 +63,9 @@ def embed_with_google(texts: list[str], task_type: str, api_key: str) -> np.ndar
     import google.genai as genai
     from google.genai import types as genai_types
 
+    # Google API rejects empty strings — replace with a single space
+    texts = [t if t.strip() else " " for t in texts]
+
     client = genai.Client(api_key=api_key)
     response = client.models.embed_content(
         model=GOOGLE_EMBEDDING_MODEL,

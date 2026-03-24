@@ -54,6 +54,10 @@ Open the **RAG Search** page, enter a query in natural language.
 Optionally filter by category, tags, or date range.
 The app returns a Claude-generated answer with referenced notes.
 
+## Embedding Model
+
+Semantic search uses the [`paraphrase-multilingual-mpnet-base-v2`](https://huggingface.co/sentence-transformers/paraphrase-multilingual-mpnet-base-v2) model from sentence-transformers, which runs locally without any external API calls.
+
 ## Credits
 
 This application — including the RAG search pipeline, hybrid search implementation, and answer generation — was built with [Claude](https://claude.ai) (Anthropic).

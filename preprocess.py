@@ -129,7 +129,7 @@ def _tokenize_for_bm25() -> None:
             cache[cid] = (cup, ctok)
         print(f"Cache loaded: {len(cache)} entries from previous run.")
     else:
-        print("No cache found — tokenizing all notes from scratch.")
+        print("No cache found - tokenizing all notes from scratch.")
 
     # Classify notes
     new_indices = []
@@ -187,7 +187,7 @@ def _create_embeddings() -> None:
             cache[cid] = (cup, row_idx)
         print(f"Cache loaded: {len(cache)} entries from previous run.")
     else:
-        print("No cache found — encoding all notes from scratch.")
+        print("No cache found - encoding all notes from scratch.")
 
     # Load checkpoint (partial results from a previous interrupted run)
     ckpt_path = DATA_DIR / "embedding_checkpoint.npz"
@@ -251,12 +251,12 @@ def _create_embeddings() -> None:
                 updates=ckpt_ups_list,
                 embeddings=np.array(ckpt_embs_list, dtype="float32"),
             )
-            print(f"  Batch {b + 1}/{total_batches} done — checkpoint saved ({len(ckpt_ids_list)} notes).")
+            print(f"  Batch {b + 1}/{total_batches} done - checkpoint saved ({len(ckpt_ids_list)} notes).")
 
     else:
         if old_embeddings is not None:
             dim = old_embeddings.shape[1]
-        print("All notes served from cache/checkpoint — skipping model load.")
+        print("All notes served from cache/checkpoint - skipping model load.")
 
     # Assemble in current CSV row order
     print("  Assembling final embedding matrix...")
@@ -326,7 +326,7 @@ def _create_embeddings_google() -> None:
             cache[cid] = (cup, row_idx)
         print(f"Cache loaded: {len(cache)} entries from previous run.")
     else:
-        print("No cache found — encoding all notes from scratch.")
+        print("No cache found - encoding all notes from scratch.")
 
     # Load checkpoint
     ckpt_path = google_dir / "embedding_checkpoint.npz"
@@ -369,7 +369,12 @@ def _create_embeddings_google() -> None:
             for b in range(total_batches):
                 batch_contents = new_contents[b * BATCH : (b + 1) * BATCH]
                 batch_indices  = new_indices [b * BATCH : (b + 1) * BATCH]
-                batch_emb = embed_with_google(batch_contents, "RETRIEVAL_DOCUMENT", api_key)
+                try:
+                    batch_emb = embed_with_google(batch_contents, "RETRIEVAL_DOCUMENT", api_key)
+                except RuntimeError as e:
+                    print(f"\n{e}")
+                    print("\nCheckpoint is saved. Re-run to resume from where it stopped.")
+                    sys.exit(1)
 
                 for idx, emb in zip(batch_indices, batch_emb):
                     nid, nup = ids[idx], updates[idx]
@@ -388,7 +393,7 @@ def _create_embeddings_google() -> None:
     else:
         if old_embeddings is not None:
             dim = old_embeddings.shape[1]
-        print("All notes served from cache/checkpoint — skipping API calls.")
+        print("All notes served from cache/checkpoint - skipping API calls.")
 
     # Assemble in current CSV row order
     final_embeddings = np.empty((n_total, dim), dtype="float32")

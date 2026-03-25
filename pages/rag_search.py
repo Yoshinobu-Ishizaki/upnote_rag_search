@@ -170,8 +170,13 @@ if new_search:
             # Google embedding: semantic search only
             if faiss_ok:
                 gemini_api_key = get_gemini_api_key()
-                query_embedding = embed_with_google([question], "RETRIEVAL_QUERY", gemini_api_key)
-                ranked = semantic_search(faiss_index, id_list, query_embedding, top_k=top_k)
+                try:
+                    query_embedding = embed_with_google([question], "RETRIEVAL_QUERY", gemini_api_key)
+                    ranked = semantic_search(faiss_index, id_list, query_embedding, top_k=top_k)
+                except RuntimeError as e:
+                    st.error(str(e))
+                    st.info("Set `EMBEDDING_PROVIDER=local` in config.ini and restart the app to use local embeddings.")
+                    st.stop()
             else:
                 ranked = []
         else:

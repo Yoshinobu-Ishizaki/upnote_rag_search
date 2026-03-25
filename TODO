@@ -1,0 +1,9 @@
+For v.0.9.3, pls implement follows. 
+- When user calls preprocess.py from app.py, it opens dialog window. 
+- In the dialog, output of preprocess.py is shown. 
+- It automatically closes when preprocess.py successfully ends. 
+- It has no close [x] button. 
+- It has "Cancel" button at bottom-right corner. 
+- When user clicks "Cancel", preprocess.py should be terminated, then close the dialog. 
+- This function is called, when user calls it from Setting.py or Automatic preprocess is invoked by "auto_preprocess = true". 
+- Update version string in @pyproject.toml. 

@@ -84,6 +84,47 @@ def save_backup_path(path: str) -> None:
         cfg.write(f)
 
 
+VALID_DATE_MODES = ["すべて", "以前", "以降", "範囲"]
+
+
+def get_default_date_mode() -> str:
+    cfg = _read_config()
+    value = cfg.get("settings", "DEFAULT_DATE_MODE", fallback="すべて").strip()
+    return value if value in VALID_DATE_MODES else "すべて"
+
+
+def get_default_categories() -> list[str]:
+    cfg = _read_config()
+    raw = cfg.get("settings", "DEFAULT_CATEGORIES", fallback="").strip()
+    return [c.strip() for c in raw.split(",") if c.strip()] if raw else []
+
+
+def get_default_tags() -> list[str]:
+    cfg = _read_config()
+    raw = cfg.get("settings", "DEFAULT_TAGS", fallback="").strip()
+    return [t.strip() for t in raw.split(",") if t.strip()] if raw else []
+
+
+def get_default_start_date() -> "datetime.date":
+    import datetime
+    cfg = _read_config()
+    raw = cfg.get("settings", "DEFAULT_START_DATE", fallback="").strip()
+    try:
+        return datetime.date.fromisoformat(raw) if raw else datetime.date(2010, 1, 1)
+    except ValueError:
+        return datetime.date(2010, 1, 1)
+
+
+def get_default_end_date() -> "datetime.date":
+    import datetime
+    cfg = _read_config()
+    raw = cfg.get("settings", "DEFAULT_END_DATE", fallback="").strip()
+    try:
+        return datetime.date.fromisoformat(raw) if raw else datetime.date.today()
+    except ValueError:
+        return datetime.date.today()
+
+
 def get_auto_preprocess() -> bool:
     cfg = _read_config()
     return cfg.get("settings", "AUTO_PREPROCESS", fallback="false").strip().lower() == "true"

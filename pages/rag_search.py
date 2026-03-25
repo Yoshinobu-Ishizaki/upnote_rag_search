@@ -13,7 +13,19 @@ if str(PROJECT_ROOT) not in sys.path:
 from st_aggrid import AgGrid, GridOptionsBuilder
 
 from src.bm25_search import build_bm25, load_split_data
-from src.config import get_api_key, get_claude_model, get_embedding_provider, get_gemini_api_key, get_max_context_chars, get_top_k
+from src.config import (
+    get_api_key,
+    get_claude_model,
+    get_default_categories,
+    get_default_date_mode,
+    get_default_end_date,
+    get_default_start_date,
+    get_default_tags,
+    get_embedding_provider,
+    get_gemini_api_key,
+    get_max_context_chars,
+    get_top_k,
+)
 from src.embedding import embed_with_google, get_embedding_model, load_index, semantic_search
 from src.hybrid_search import reciprocal_rank_fusion
 from src.tokenizer import create_tokenizer, tokenize_text
@@ -110,7 +122,8 @@ with st.sidebar:
 
     # Category
     all_categories = sorted([c for c in text_df["category"].drop_nulls().unique().to_list() if c])
-    selected_categories = st.multiselect("カテゴリ", all_categories)
+    _default_cats = [c for c in get_default_categories() if c in all_categories]
+    selected_categories = st.multiselect("カテゴリ", all_categories, default=_default_cats)
 
     # Tags (pipe-delimited — explode to individual tags)
     all_tags = sorted({
@@ -120,18 +133,21 @@ with st.sidebar:
         for tag in tags_str.split("|")
         if tag
     })
-    selected_tags = st.multiselect("タグ", all_tags)
+    _default_tags = [t for t in get_default_tags() if t in all_tags]
+    selected_tags = st.multiselect("タグ", all_tags, default=_default_tags)
 
     # Created date filter
     st.subheader("作成日")
-    date_mode = st.selectbox("条件", ["すべて", "以前", "以降", "範囲"])
+    _date_modes = ["すべて", "以前", "以降", "範囲"]
+    _default_date_mode = get_default_date_mode()
+    date_mode = st.selectbox("条件", _date_modes, index=_date_modes.index(_default_date_mode))
     date_before = date_after = date_from = date_to = None
     if date_mode == "以前":
-        date_before = st.date_input("日付")
+        date_before = st.date_input("日付", value=get_default_end_date())
     elif date_mode == "以降":
-        date_after = st.date_input("日付")
+        date_after = st.date_input("日付", value=get_default_start_date())
     elif date_mode == "範囲":
-        date_range = st.date_input("期間", value=(datetime.date(2010, 1, 1), datetime.date.today()))
+        date_range = st.date_input("期間", value=(get_default_start_date(), get_default_end_date()))
         if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
             date_from, date_to = date_range
 

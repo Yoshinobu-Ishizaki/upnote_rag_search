@@ -13,15 +13,21 @@ if str(PROJECT_ROOT) not in sys.path:
 from st_aggrid import AgGrid, GridOptionsBuilder
 
 from src.bm25_search import build_bm25, load_split_data
-from src.config import get_api_key, get_claude_model, get_max_context_chars, get_top_k
-from src.embedding import get_embedding_model, load_index, semantic_search
+from src.config import get_api_key, get_claude_model, get_embedding_provider, get_gemini_api_key, get_max_context_chars, get_top_k
+from src.embedding import embed_with_google, get_embedding_model, load_index, semantic_search
 from src.hybrid_search import reciprocal_rank_fusion
 from src.tokenizer import create_tokenizer, tokenize_text
 
 DATA_DIR = PROJECT_ROOT / "data"
+PROVIDER = get_embedding_provider()
+GOOGLE_DATA_DIR = DATA_DIR / "google"
 
-st.title("RAG Search")
-st.caption(f"ハイブリッド検索（BM25 + 意味検索）+ Claude AI による回答生成 | モデル: `{get_claude_model()}`")
+if PROVIDER == "google":
+    st.title("RAG Search")
+    st.caption(f"意味検索（Google Embedding）+ Claude AI による回答生成 | モデル: `{get_claude_model()}`")
+else:
+    st.title("RAG Search")
+    st.caption(f"ハイブリッド検索（BM25 + 意味検索）+ Claude AI による回答生成 | モデル: `{get_claude_model()}`")
 
 # ---------------------------------------------------------------------------
 # Cached resources
@@ -49,16 +55,25 @@ def _bm25(_df: pl.DataFrame):
 
 
 @st.cache_resource
-def _faiss_index():
+def _faiss_index_local():
     return load_index(DATA_DIR)
+
+
+@st.cache_resource
+def _faiss_index_google():
+    return load_index(GOOGLE_DATA_DIR)
 
 
 # ---------------------------------------------------------------------------
 # Check data availability
 # ---------------------------------------------------------------------------
 
-faiss_ok = (DATA_DIR / "faiss.index").exists() and (DATA_DIR / "embeddings.npy").exists()
-csv_ok = (DATA_DIR / "upnote_text_split.csv").exists() and (DATA_DIR / "upnote_text.csv").exists()
+if PROVIDER == "google":
+    faiss_ok = (GOOGLE_DATA_DIR / "faiss.index").exists()
+    csv_ok = (DATA_DIR / "upnote_text.csv").exists()
+else:
+    faiss_ok = (DATA_DIR / "faiss.index").exists() and (DATA_DIR / "embeddings.npy").exists()
+    csv_ok = (DATA_DIR / "upnote_text_split.csv").exists() and (DATA_DIR / "upnote_text.csv").exists()
 
 if not csv_ok:
     st.error("データファイルが見つかりません。`python preprocess.py` を実行してからアプリを再起動してください。")
@@ -66,7 +81,7 @@ if not csv_ok:
 
 if not faiss_ok:
     st.warning(
-        "FAISSインデックスが見つかりません。意味検索は使用できません。"
+        "FAISSインデックスが見つかりません。"
         "`python preprocess.py` を実行してインデックスを生成してください。"
     )
 
@@ -74,13 +89,17 @@ if not faiss_ok:
 # Load resources
 # ---------------------------------------------------------------------------
 
-split_df = _load_split()
 text_df = _load_text()
-bm25 = _bm25(split_df)
 
-if faiss_ok:
-    faiss_index, id_list = _faiss_index()
-    model = get_embedding_model()
+if PROVIDER == "google":
+    if faiss_ok:
+        faiss_index, id_list = _faiss_index_google()
+else:
+    split_df = _load_split()
+    bm25 = _bm25(split_df)
+    if faiss_ok:
+        faiss_index, id_list = _faiss_index_local()
+        model = get_embedding_model()
 
 # ---------------------------------------------------------------------------
 # UI
@@ -147,33 +166,39 @@ if new_search:
         st.stop()
 
     with st.spinner("検索中..."):
-        tokenizer = _tokenizer()
-        query_tokens = tokenize_text(question, tokenizer)
+        if PROVIDER == "google":
+            # Google embedding: semantic search only
+            if faiss_ok:
+                gemini_api_key = get_gemini_api_key()
+                query_embedding = embed_with_google([question], "RETRIEVAL_QUERY", gemini_api_key)
+                ranked = semantic_search(faiss_index, id_list, query_embedding, top_k=top_k)
+            else:
+                ranked = []
+        else:
+            # Local: hybrid BM25 + semantic search
+            tokenizer = _tokenizer()
+            query_tokens = tokenize_text(question, tokenizer)
 
-        # BM25 search
-        scores_bm25 = bm25.get_scores(query_tokens)
-        id_list_bm25 = split_df["id"].to_list()
-        scored_bm25 = sorted(
-            [(id_list_bm25[i], scores_bm25[i]) for i in range(len(scores_bm25)) if scores_bm25[i] > 0],
-            key=lambda x: x[1],
-            reverse=True,
-        )
-        bm25_ids = [doc_id for doc_id, _ in scored_bm25[: top_k * 2]]
-
-        # Semantic search (if available)
-        if faiss_ok:
-            query_embedding = model.encode(
-                [question], normalize_embeddings=True
+            scores_bm25 = bm25.get_scores(query_tokens)
+            id_list_bm25 = split_df["id"].to_list()
+            scored_bm25 = sorted(
+                [(id_list_bm25[i], scores_bm25[i]) for i in range(len(scores_bm25)) if scores_bm25[i] > 0],
+                key=lambda x: x[1],
+                reverse=True,
             )
-            semantic_ids = semantic_search(faiss_index, id_list, query_embedding, top_k=top_k * 2)
-        else:
-            semantic_ids = []
+            bm25_ids = [doc_id for doc_id, _ in scored_bm25[: top_k * 2]]
 
-        # Hybrid RRF fusion
-        if semantic_ids:
-            ranked = reciprocal_rank_fusion(bm25_ids, semantic_ids)[:top_k]
-        else:
-            ranked = [(doc_id, 0.0) for doc_id in bm25_ids[:top_k]]
+            if faiss_ok:
+                query_embedding = model.encode([question], normalize_embeddings=True)
+                semantic_results = semantic_search(faiss_index, id_list, query_embedding, top_k=top_k * 2)
+                semantic_ids = [doc_id for doc_id, _ in semantic_results]
+            else:
+                semantic_ids = []
+
+            if semantic_ids:
+                ranked = reciprocal_rank_fusion(bm25_ids, semantic_ids)[:top_k]
+            else:
+                ranked = [(doc_id, 0.0) for doc_id in bm25_ids[:top_k]]
 
         filters_active = bool(selected_categories or selected_tags or date_mode != "すべて")
 
@@ -283,14 +308,15 @@ if new_search:
             ],
         )
 
-    rrf_score_map = {doc_id: score for doc_id, score in ranked}
+    score_map = {doc_id: score for doc_id, score in ranked}
+    score_col = "スコア"
 
     rows = []
     for doc_id in included_ids:
         if doc_id not in text_lookup:
             continue
         fpath, contents, created, category, tags = text_lookup[doc_id]
-        score = rrf_score_map.get(doc_id, 0.0)
+        score = score_map.get(doc_id, 0.0)
         preview = (contents[:300] + "...") if contents and len(contents) > 300 else (contents or "")
         rows.append({
             "ノート": fpath,
@@ -298,12 +324,12 @@ if new_search:
             "作成日": created[:10] if created else "",
             "タグ": tags or "",
             "内容プレビュー": preview,
-            "RRFスコア": round(score, 4),
+            score_col: round(score, 4),
         })
 
     result_df = pl.DataFrame(rows) if rows else pl.DataFrame(schema={
         "ノート": pl.Utf8, "カテゴリ": pl.Utf8, "作成日": pl.Utf8,
-        "タグ": pl.Utf8, "内容プレビュー": pl.Utf8, "RRFスコア": pl.Float64,
+        "タグ": pl.Utf8, "内容プレビュー": pl.Utf8, score_col: pl.Float64,
     })
 
     st.session_state["rag_results"] = {
@@ -311,6 +337,7 @@ if new_search:
         "result_df": result_df,
         "included_ids": included_ids,
         "fallback_truncated": fallback_truncated,
+        "score_col": score_col,
     }
 
     if fallback_truncated:
@@ -330,6 +357,7 @@ st.markdown(res["answer"])
 
 result_df = res["result_df"]
 included_ids = res["included_ids"]
+score_col = res.get("score_col", "スコア")
 
 st.subheader(f"参照ノート ({len(included_ids)} 件)")
 
@@ -347,7 +375,7 @@ gb.configure_column("ノート", width=180)
 gb.configure_column("カテゴリ", width=100)
 gb.configure_column("作成日", width=100)
 gb.configure_column("タグ", width=100)
-gb.configure_column("RRFスコア", width=90, type=["numericColumn"], valueFormatter="x.toFixed(4)")
+gb.configure_column(score_col, width=90, type=["numericColumn"], valueFormatter="x.toFixed(4)")
 
 AgGrid(
     result_df.to_pandas(),

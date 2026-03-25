@@ -1,9 +1,12 @@
-"""FAISS-based semantic search using sentence-transformers."""
+"""FAISS-based semantic search using sentence-transformers or Google embedding API."""
 from pathlib import Path
 
 import numpy as np
 import polars as pl
 import streamlit as st
+
+GOOGLE_EMBEDDING_MODEL = "gemini-embedding-001"
+GOOGLE_EMBEDDING_DIM = 3072
 
 
 def load_index(data_dir: Path) -> tuple:
@@ -25,13 +28,17 @@ def semantic_search(
     id_list: list[str],
     query_embedding: np.ndarray,
     top_k: int,
-) -> list[str]:
-    """Return top_k doc IDs by cosine similarity (best first).
+) -> list[tuple[str, float]]:
+    """Return top_k (doc_id, score) tuples by cosine similarity (best first).
 
     query_embedding should be shape (1, dim) and L2-normalized.
     """
     distances, indices = index.search(query_embedding.astype(np.float32), top_k)
-    return [id_list[i] for i in indices[0] if 0 <= i < len(id_list)]
+    return [
+        (id_list[i], float(distances[0][rank]))
+        for rank, i in enumerate(indices[0])
+        if 0 <= i < len(id_list)
+    ]
 
 
 @st.cache_resource
@@ -40,3 +47,29 @@ def get_embedding_model():
     from sentence_transformers import SentenceTransformer
 
     return SentenceTransformer("paraphrase-multilingual-mpnet-base-v2")
+
+
+def embed_with_google(texts: list[str], task_type: str, api_key: str) -> np.ndarray:
+    """Embed texts using Google's text-multilingual-embedding-002 model.
+
+    Args:
+        texts: List of texts to embed (max 100 per call).
+        task_type: 'RETRIEVAL_DOCUMENT' for indexing, 'RETRIEVAL_QUERY' for queries.
+        api_key: Gemini API key.
+
+    Returns:
+        np.ndarray of shape (len(texts), 768), L2-normalized float32.
+    """
+    import google.genai as genai
+    from google.genai import types as genai_types
+
+    # Google API rejects empty strings — replace with a single space
+    texts = [t if t.strip() else " " for t in texts]
+
+    client = genai.Client(api_key=api_key)
+    response = client.models.embed_content(
+        model=GOOGLE_EMBEDDING_MODEL,
+        contents=texts,
+        config=genai_types.EmbedContentConfig(task_type=task_type),
+    )
+    return np.array([e.values for e in response.embeddings], dtype="float32")

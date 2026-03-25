@@ -54,6 +54,17 @@ Open the **RAG Search** page, enter a query in natural language.
 Optionally filter by category, tags, or date range.
 The app returns a Claude-generated answer with referenced notes.
 
+## Embedding Model
+
+Two embedding providers are supported, switchable via `EMBEDDING_PROVIDER` in `config.ini`:
+
+| Provider | Model | Search |
+|---|---|---|
+| `local` (default) | [`paraphrase-multilingual-mpnet-base-v2`](https://huggingface.co/sentence-transformers/paraphrase-multilingual-mpnet-base-v2) — runs locally | Hybrid: BM25 (Sudachi) + semantic (FAISS) |
+| `google` | `gemini-embedding-001` — Google Generative AI API (3072次元) | Semantic only (FAISS) |
+
+For `google` provider, set `GEMINI_API_KEY` in `.env`. Google embeddings are stored in `data/google/` and can coexist with local embeddings.
+
 ## Credits
 
 This application — including the RAG search pipeline, hybrid search implementation, and answer generation — was built with [Claude](https://claude.ai) (Anthropic).

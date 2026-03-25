@@ -5,6 +5,7 @@ description = "UpNote BM25 + Hybrid RAG search"
 requires-python = ">=3.10"
 dependencies = [
     "anthropic",
+    "google-genai",
     "sentence-transformers",
     "faiss-cpu",
     "tqdm",

@@ -16,6 +16,8 @@ DATA_DIR = PROJECT_ROOT / "data"
 
 
 def main() -> None:
+    from src.config import get_embedding_provider
+
     parser = argparse.ArgumentParser(
         description="Preprocess UpNote .upnx backup files for search"
     )
@@ -33,30 +35,43 @@ def main() -> None:
 
     DATA_DIR.mkdir(exist_ok=True)
 
+    provider = get_embedding_provider()
+    print(f"Embedding provider: {provider}")
+
     if args.embeddings_only:
         if not (DATA_DIR / "upnote_text.csv").exists():
             print("Error: data/upnote_text.csv not found. Run without --embeddings-only first.")
             sys.exit(1)
-        _print_step(3, "Creating sentence embeddings and FAISS index (embeddings-only mode)")
-        print("This may take a long time for large note collections.\n")
-        _create_embeddings()
-        _print_done()
+        if provider == "google":
+            _print_step(3, "Creating Google embeddings and FAISS index (embeddings-only mode)")
+            _create_embeddings_google()
+        else:
+            _print_step(3, "Creating sentence embeddings and FAISS index (embeddings-only mode)")
+            print("This may take a long time for large note collections.\n")
+            _create_embeddings()
+        _print_done(provider)
         return
 
     # Step 1: .upnx → upnote_text.csv
     _print_step(1, "Creating text dataframe from .upnx backup files")
     _create_dataframe(args.path)
 
-    # Step 2: upnote_text.csv → upnote_text_split.csv (BM25 tokens)
-    _print_step(2, "Tokenizing text for BM25 search")
-    _tokenize_for_bm25()
+    if provider == "google":
+        # Step 2 skipped (no Sudachi tokenization needed)
+        # Step 3: Google API embeddings
+        _print_step(3, "Creating Google embeddings and FAISS index")
+        _create_embeddings_google()
+    else:
+        # Step 2: upnote_text.csv → upnote_text_split.csv (BM25 tokens)
+        _print_step(2, "Tokenizing text for BM25 search")
+        _tokenize_for_bm25()
 
-    # Step 3: embeddings.npy + faiss.index
-    _print_step(3, "Creating sentence embeddings and FAISS index")
-    print("This may take a long time for large note collections.\n")
-    _create_embeddings()
+        # Step 3: embeddings.npy + faiss.index
+        _print_step(3, "Creating sentence embeddings and FAISS index")
+        print("This may take a long time for large note collections.\n")
+        _create_embeddings()
 
-    _print_done()
+    _print_done(provider)
 
 
 def _create_dataframe(path: str | None) -> None:
@@ -72,13 +87,15 @@ def _create_dataframe(path: str | None) -> None:
     print(f"Saved: {out}")
 
 
-def _print_done() -> None:
+def _print_done(provider: str = "local") -> None:
     print("\n" + "=" * 60)
     print("Preprocessing complete!")
-    print(f"\nGenerated files in {DATA_DIR}:")
-    for f in sorted(DATA_DIR.iterdir()):
-        size_mb = f.stat().st_size / 1024 / 1024
-        print(f"  {f.name:40s} {size_mb:8.2f} MB")
+    out_dir = DATA_DIR / "google" if provider == "google" else DATA_DIR
+    print(f"\nGenerated files in {out_dir}:")
+    for f in sorted(out_dir.iterdir()):
+        if f.is_file():
+            size_mb = f.stat().st_size / 1024 / 1024
+            print(f"  {f.name:40s} {size_mb:8.2f} MB")
 
 
 def _print_step(n: int, description: str) -> None:
@@ -265,6 +282,139 @@ def _create_embeddings() -> None:
 
     pl.DataFrame({"id": ids, "update": updates}).write_csv(meta_path)
     print(f"Saved: {meta_path}")
+
+    if ckpt_path.exists():
+        ckpt_path.unlink()
+        print("Checkpoint deleted (run complete).")
+
+
+def _create_embeddings_google() -> None:
+    import faiss
+    import numpy as np
+    import polars as pl
+    from tqdm import tqdm
+
+    from src.config import get_gemini_api_key
+    from src.embedding import embed_with_google, GOOGLE_EMBEDDING_DIM
+
+    api_key = get_gemini_api_key()
+    if not api_key:
+        print("Error: GEMINI_API_KEY not found in .env or environment variables.")
+        sys.exit(1)
+
+    google_dir = DATA_DIR / "google"
+    google_dir.mkdir(exist_ok=True)
+
+    df = pl.read_csv(DATA_DIR / "upnote_text.csv")
+    ids      = df["id"].to_list()
+    updates  = df["update"].to_list()
+    contents = df["contents"].fill_null("").to_list()
+    n_total  = len(ids)
+
+    # Load cache
+    meta_path = google_dir / "embedding_meta.csv"
+    npy_path  = google_dir / "embeddings.npy"
+    cache: dict = {}       # id -> (update_ts, old_row_idx)
+    old_embeddings = None
+
+    if meta_path.exists() and npy_path.exists():
+        meta_df = pl.read_csv(meta_path)
+        old_embeddings = np.load(npy_path)
+        for row_idx, (cid, cup) in enumerate(
+            zip(meta_df["id"].to_list(), meta_df["update"].to_list())
+        ):
+            cache[cid] = (cup, row_idx)
+        print(f"Cache loaded: {len(cache)} entries from previous run.")
+    else:
+        print("No cache found — encoding all notes from scratch.")
+
+    # Load checkpoint
+    ckpt_path = google_dir / "embedding_checkpoint.npz"
+    ckpt: dict = {}  # id -> (update_ts, np.ndarray embedding)
+    if ckpt_path.exists():
+        data = np.load(ckpt_path, allow_pickle=True)
+        ckpt_ids_arr  = data["ids"].tolist()
+        ckpt_ups_arr  = data["updates"].tolist()
+        ckpt_embs_arr = data["embeddings"]
+        for cid, cup, cemb in zip(ckpt_ids_arr, ckpt_ups_arr, ckpt_embs_arr):
+            ckpt[cid] = (cup, cemb)
+        print(f"Checkpoint loaded: {len(ckpt)} partially-encoded notes resumed.")
+    else:
+        print("No checkpoint found.")
+
+    # Classify notes
+    new_indices, new_contents = [], []
+    for i, (nid, nup) in enumerate(zip(ids, updates)):
+        if nid in cache and cache[nid][0] == nup:
+            pass
+        elif nid in ckpt and ckpt[nid][0] == nup:
+            pass
+        else:
+            new_indices.append(i)
+            new_contents.append(contents[i])
+
+    n_cached = n_total - len(new_indices)
+    print(f"  {n_cached} notes reused from cache/checkpoint, {len(new_indices)} notes to encode.")
+
+    # Encode only new notes via Google API
+    dim = GOOGLE_EMBEDDING_DIM
+    if new_contents:
+        ckpt_ids_list  = list(ckpt.keys())
+        ckpt_ups_list  = [ckpt[k][0] for k in ckpt_ids_list]
+        ckpt_embs_list = [ckpt[k][1] for k in ckpt_ids_list]
+
+        BATCH = 100  # Google API limit
+        total_batches = (len(new_contents) + BATCH - 1) // BATCH
+        with tqdm(total=len(new_contents), desc="Embedding notes (google)", unit="note") as pbar:
+            for b in range(total_batches):
+                batch_contents = new_contents[b * BATCH : (b + 1) * BATCH]
+                batch_indices  = new_indices [b * BATCH : (b + 1) * BATCH]
+                batch_emb = embed_with_google(batch_contents, "RETRIEVAL_DOCUMENT", api_key)
+
+                for idx, emb in zip(batch_indices, batch_emb):
+                    nid, nup = ids[idx], updates[idx]
+                    ckpt[nid] = (nup, emb)
+                    ckpt_ids_list.append(nid)
+                    ckpt_ups_list.append(nup)
+                    ckpt_embs_list.append(emb)
+
+                np.savez(
+                    ckpt_path,
+                    ids=ckpt_ids_list,
+                    updates=ckpt_ups_list,
+                    embeddings=np.array(ckpt_embs_list, dtype="float32"),
+                )
+                pbar.update(len(batch_contents))
+    else:
+        if old_embeddings is not None:
+            dim = old_embeddings.shape[1]
+        print("All notes served from cache/checkpoint — skipping API calls.")
+
+    # Assemble in current CSV row order
+    final_embeddings = np.empty((n_total, dim), dtype="float32")
+    for i, (nid, nup) in enumerate(zip(ids, updates)):
+        if nid in cache and cache[nid][0] == nup:
+            final_embeddings[i] = old_embeddings[cache[nid][1]]
+        else:
+            final_embeddings[i] = ckpt[nid][1]
+
+    # Save outputs
+    np.save(npy_path, final_embeddings)
+    print(f"Saved: {npy_path}")
+
+    index = faiss.IndexFlatIP(dim)
+    index.add(final_embeddings)
+    out_faiss = google_dir / "faiss.index"
+    faiss.write_index(index, str(out_faiss))
+    print(f"Saved: {out_faiss}")
+
+    pl.DataFrame({"id": ids, "update": updates}).write_csv(meta_path)
+    print(f"Saved: {meta_path}")
+
+    # Minimal upnote_text_split.csv for load_index() compatibility
+    split_path = google_dir / "upnote_text_split.csv"
+    pl.DataFrame({"id": ids, "update": updates}).write_csv(split_path)
+    print(f"Saved: {split_path}")
 
     if ckpt_path.exists():
         ckpt_path.unlink()

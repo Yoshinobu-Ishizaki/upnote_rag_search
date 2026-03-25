@@ -56,6 +56,24 @@ def get_claude_model() -> str:
     return cfg.get("settings", "CLAUDE_MODEL", fallback="claude-haiku-4-5-20251001")
 
 
+def get_embedding_provider() -> str:
+    """Return 'google' or 'local'."""
+    cfg = _read_config()
+    return cfg.get("settings", "EMBEDDING_PROVIDER", fallback="local").strip().lower()
+
+
+def get_gemini_api_key() -> str:
+    """Read GEMINI_API_KEY from .env, then environment variables."""
+    if ENV_PATH.exists():
+        for line in ENV_PATH.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line.startswith("GEMINI_API_KEY="):
+                value = line.split("=", 1)[1].strip()
+                if value:
+                    return value
+    return os.environ.get("GEMINI_API_KEY", "")
+
+
 def save_backup_path(path: str) -> None:
     """Save backup path to config.ini."""
     cfg = _read_config()

@@ -31,8 +31,9 @@ from src.hybrid_search import reciprocal_rank_fusion
 from src.tokenizer import create_tokenizer, tokenize_text
 
 DATA_DIR = PROJECT_ROOT / "data"
-PROVIDER = get_embedding_provider()
+LOCAL_DATA_DIR = DATA_DIR / "local"
 GOOGLE_DATA_DIR = DATA_DIR / "google"
+PROVIDER = get_embedding_provider()
 
 if PROVIDER == "google":
     st.title("RAG Search")
@@ -53,7 +54,7 @@ def _tokenizer():
 
 @st.cache_data
 def _load_split() -> pl.DataFrame:
-    return load_split_data(DATA_DIR)
+    return load_split_data(LOCAL_DATA_DIR)
 
 
 @st.cache_data
@@ -68,7 +69,7 @@ def _bm25(_df: pl.DataFrame):
 
 @st.cache_resource
 def _faiss_index_local():
-    return load_index(DATA_DIR)
+    return load_index(LOCAL_DATA_DIR)
 
 
 @st.cache_resource
@@ -84,8 +85,8 @@ if PROVIDER == "google":
     faiss_ok = (GOOGLE_DATA_DIR / "faiss.index").exists()
     csv_ok = (DATA_DIR / "upnote_text.csv").exists()
 else:
-    faiss_ok = (DATA_DIR / "faiss.index").exists() and (DATA_DIR / "embeddings.npy").exists()
-    csv_ok = (DATA_DIR / "upnote_text_split.csv").exists() and (DATA_DIR / "upnote_text.csv").exists()
+    faiss_ok = (LOCAL_DATA_DIR / "faiss.index").exists() and (LOCAL_DATA_DIR / "embeddings.npy").exists()
+    csv_ok = (LOCAL_DATA_DIR / "upnote_text_split.csv").exists() and (DATA_DIR / "upnote_text.csv").exists()
 
 if not csv_ok:
     st.error("データファイルが見つかりません。`python preprocess.py` を実行してからアプリを再起動してください。")

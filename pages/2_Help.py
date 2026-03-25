@@ -97,7 +97,7 @@ DEFAULT_END_DATE =
 | `google` | gemini-embedding-001（Google API、3072次元） | 意味検索のみ |
 
 `google` を使う場合は `.env` に `GEMINI_API_KEY` を設定してください。
-両プロバイダーのインデックスは共存できます（`local` は `data/`、`google` は `data/google/`）。
+両プロバイダーのインデックスは共存できます（`local` は `data/local/`、`google` は `data/google/`）。
 
 ---
 

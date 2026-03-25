@@ -45,7 +45,7 @@ Run the preprocessing pipeline to build the search index:
 This will:
 1. Parse the `.upnx` file → `data/upnote_text.csv`
 2. Tokenize with Sudachi → `data/upnote_text_split.csv`
-3. Build FAISS semantic index → `data/faiss.index`
+3. Build FAISS semantic index → `data/local/faiss.index`
 
 To rebuild only the embeddings/FAISS index (skipping steps 1 & 2), use:
 
@@ -96,7 +96,7 @@ Two embedding providers are supported, switchable via `EMBEDDING_PROVIDER` in `c
 | `local` (default) | [`paraphrase-multilingual-mpnet-base-v2`](https://huggingface.co/sentence-transformers/paraphrase-multilingual-mpnet-base-v2) — runs locally | Hybrid: BM25 (Sudachi) + semantic (FAISS), fused via RRF |
 | `google` | `gemini-embedding-001` — Google Generative AI API (3072-dim) | Semantic only (FAISS) |
 
-For `google` provider, set `GEMINI_API_KEY` in `.env`. Google embeddings are stored in `data/google/` and can coexist with local embeddings.
+For `google` provider, set `GEMINI_API_KEY` in `.env`. Each provider stores its index independently (`data/local/` and `data/google/`) and can coexist.
 
 ## Configuration Reference
 

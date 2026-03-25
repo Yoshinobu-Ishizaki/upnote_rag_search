@@ -13,6 +13,8 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 DATA_DIR = PROJECT_ROOT / "data"
+LOCAL_DATA_DIR = DATA_DIR / "local"
+GOOGLE_DATA_DIR = DATA_DIR / "google"
 
 
 def main() -> None:
@@ -34,6 +36,7 @@ def main() -> None:
     args = parser.parse_args()
 
     DATA_DIR.mkdir(exist_ok=True)
+    LOCAL_DATA_DIR.mkdir(exist_ok=True)
 
     provider = get_embedding_provider()
     print(f"Embedding provider: {provider}")
@@ -90,7 +93,7 @@ def _create_dataframe(path: str | None) -> None:
 def _print_done(provider: str = "local") -> None:
     print("\n" + "=" * 60)
     print("Preprocessing complete!")
-    out_dir = DATA_DIR / "google" if provider == "google" else DATA_DIR
+    out_dir = GOOGLE_DATA_DIR if provider == "google" else LOCAL_DATA_DIR
     print(f"\nGenerated files in {out_dir}:")
     for f in sorted(out_dir.iterdir()):
         if f.is_file():
@@ -117,7 +120,7 @@ def _tokenize_for_bm25() -> None:
     n_total  = len(ids)
 
     # Load cache from previous run
-    split_path = DATA_DIR / "upnote_text_split.csv"
+    split_path = LOCAL_DATA_DIR / "upnote_text_split.csv"
     cache: dict = {}  # id -> (update, tokens_str)
     if split_path.exists():
         cached_df = pl.read_csv(split_path)
@@ -173,8 +176,8 @@ def _create_embeddings() -> None:
     n_total  = len(ids)
 
     # Load cache
-    meta_path = DATA_DIR / "embedding_meta.csv"
-    npy_path  = DATA_DIR / "embeddings.npy"
+    meta_path = LOCAL_DATA_DIR / "embedding_meta.csv"
+    npy_path  = LOCAL_DATA_DIR / "embeddings.npy"
     cache: dict = {}          # id -> (update_ts, old_row_idx)
     old_embeddings = None
 
@@ -190,7 +193,7 @@ def _create_embeddings() -> None:
         print("No cache found - encoding all notes from scratch.")
 
     # Load checkpoint (partial results from a previous interrupted run)
-    ckpt_path = DATA_DIR / "embedding_checkpoint.npz"
+    ckpt_path = LOCAL_DATA_DIR / "embedding_checkpoint.npz"
     ckpt: dict = {}  # id -> (update_ts, np.ndarray embedding)
     if ckpt_path.exists():
         data = np.load(ckpt_path, allow_pickle=True)
@@ -275,7 +278,7 @@ def _create_embeddings() -> None:
     print("  Building FAISS index...")
     index = faiss.IndexFlatIP(dim)
     index.add(final_embeddings)
-    out_faiss = DATA_DIR / "faiss.index"
+    out_faiss = LOCAL_DATA_DIR / "faiss.index"
     print("  Saving FAISS index...")
     faiss.write_index(index, str(out_faiss))
     print(f"Saved: {out_faiss}")
@@ -302,8 +305,7 @@ def _create_embeddings_google() -> None:
         print("Error: GEMINI_API_KEY not found in .env or environment variables.")
         sys.exit(1)
 
-    google_dir = DATA_DIR / "google"
-    google_dir.mkdir(exist_ok=True)
+    GOOGLE_DATA_DIR.mkdir(exist_ok=True)
 
     df = pl.read_csv(DATA_DIR / "upnote_text.csv")
     ids      = df["id"].to_list()
@@ -312,8 +314,8 @@ def _create_embeddings_google() -> None:
     n_total  = len(ids)
 
     # Load cache
-    meta_path = google_dir / "embedding_meta.csv"
-    npy_path  = google_dir / "embeddings.npy"
+    meta_path = GOOGLE_DATA_DIR / "embedding_meta.csv"
+    npy_path  = GOOGLE_DATA_DIR / "embeddings.npy"
     cache: dict = {}       # id -> (update_ts, old_row_idx)
     old_embeddings = None
 
@@ -329,7 +331,7 @@ def _create_embeddings_google() -> None:
         print("No cache found - encoding all notes from scratch.")
 
     # Load checkpoint
-    ckpt_path = google_dir / "embedding_checkpoint.npz"
+    ckpt_path = GOOGLE_DATA_DIR / "embedding_checkpoint.npz"
     ckpt: dict = {}  # id -> (update_ts, np.ndarray embedding)
     if ckpt_path.exists():
         data = np.load(ckpt_path, allow_pickle=True)
@@ -409,7 +411,7 @@ def _create_embeddings_google() -> None:
 
     index = faiss.IndexFlatIP(dim)
     index.add(final_embeddings)
-    out_faiss = google_dir / "faiss.index"
+    out_faiss = GOOGLE_DATA_DIR / "faiss.index"
     faiss.write_index(index, str(out_faiss))
     print(f"Saved: {out_faiss}")
 
@@ -417,7 +419,7 @@ def _create_embeddings_google() -> None:
     print(f"Saved: {meta_path}")
 
     # Minimal upnote_text_split.csv for load_index() compatibility
-    split_path = google_dir / "upnote_text_split.csv"
+    split_path = GOOGLE_DATA_DIR / "upnote_text_split.csv"
     pl.DataFrame({"id": ids, "update": updates}).write_csv(split_path)
     print(f"Saved: {split_path}")
 

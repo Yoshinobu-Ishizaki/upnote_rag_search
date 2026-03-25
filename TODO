@@ -1,0 +1,3 @@
+App.pyに preprocess.py を読んでデータベースを更新させるための ボタンを追加する。
+config.ini にApp.py起動時に preprocess.py を自動で呼ぶかを決める設定を追加する。
+

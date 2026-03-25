@@ -84,6 +84,20 @@ def save_backup_path(path: str) -> None:
         cfg.write(f)
 
 
+def get_auto_preprocess() -> bool:
+    cfg = _read_config()
+    return cfg.get("settings", "AUTO_PREPROCESS", fallback="false").strip().lower() == "true"
+
+
+def save_auto_preprocess(enabled: bool) -> None:
+    cfg = _read_config()
+    if not cfg.has_section("settings"):
+        cfg.add_section("settings")
+    cfg.set("settings", "AUTO_PREPROCESS", "true" if enabled else "false")
+    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+        cfg.write(f)
+
+
 def save_api_key(key: str) -> None:
     """Save API key to .env file."""
     lines = []

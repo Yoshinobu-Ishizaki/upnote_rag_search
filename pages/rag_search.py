@@ -28,6 +28,7 @@ from src.config import (
 )
 from src.embedding import embed_with_google, get_embedding_model, load_index, semantic_search
 from src.hybrid_search import reciprocal_rank_fusion
+from src.date_extractor import extract_date_range
 from src.tokenizer import create_tokenizer, tokenize_text
 
 DATA_DIR = PROJECT_ROOT / "data"
@@ -183,6 +184,16 @@ if new_search:
             "ANTHROPIC_API_KEY が設定されていません。**Settings** ページで API キーを設定してください。"
         )
         st.stop()
+
+    # Auto-detect date range from question
+    _auto_date = extract_date_range(question, api_key)
+    if _auto_date:
+        date_mode = "範囲"
+        date_from = _auto_date["date_from"]
+        date_to = _auto_date["date_to"]
+        st.session_state["auto_date_notice"] = _auto_date
+    else:
+        st.session_state.pop("auto_date_notice", None)
 
     with st.spinner("検索中..."):
         if PROVIDER == "google":
@@ -375,6 +386,13 @@ if new_search:
 # ---------------------------------------------------------------------------
 
 res = st.session_state["rag_results"]
+
+if st.session_state.get("auto_date_notice"):
+    _n = st.session_state["auto_date_notice"]
+    st.info(
+        f"日付範囲を自動検出しました: **{_n['date_from']}** ～ **{_n['date_to']}**  "
+        "（サイドバーで手動変更可能）"
+    )
 
 st.subheader("回答")
 st.markdown(res["answer"])

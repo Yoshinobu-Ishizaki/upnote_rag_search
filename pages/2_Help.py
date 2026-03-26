@@ -16,7 +16,7 @@ st.markdown("""
 `config.sample.ini` を `config.ini` にコピーして編集するか、
 左サイドバーから **Settings** ページを開いて設定を保存してください。
 
-APIキーは `.env` ファイルに記載します（gitで管理されません）:
+APIキーは **Settings** ページから設定するか、`.env` ファイルに直接記載します（gitで管理されません）:
 
 ```
 ANTHROPIC_API_KEY=your-key-here
@@ -58,6 +58,7 @@ uv run python preprocess.py --embeddings-only
 |------|------|
 | バックアップパス | UpNote バックアップディレクトリのパス |
 | Anthropic API キー | Claude API キー |
+| Gemini API キー | Google 埋め込み用 API キー |
 | 自動前処理 | アプリ起動時に前処理を自動実行するか切り替え |
 | 前処理を実行 | 前処理をその場で実行（リアルタイム出力表示） |
 | データを再読み込み | キャッシュをクリアしてデータを再読み込み |

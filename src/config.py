@@ -110,9 +110,9 @@ def get_default_start_date() -> "datetime.date":
     cfg = _read_config()
     raw = cfg.get("settings", "DEFAULT_START_DATE", fallback="").strip()
     try:
-        return datetime.date.fromisoformat(raw) if raw else datetime.date(2010, 1, 1)
+        return datetime.date.fromisoformat(raw) if raw else datetime.date(1998, 1, 1)
     except ValueError:
-        return datetime.date(2010, 1, 1)
+        return datetime.date(1998, 1, 1)
 
 
 def get_default_end_date() -> "datetime.date":
@@ -152,4 +152,20 @@ def save_api_key(key: str) -> None:
                 lines.append(line)
     if not found:
         lines.append(f"ANTHROPIC_API_KEY={key}")
+    ENV_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def save_gemini_api_key(key: str) -> None:
+    """Save Gemini API key to .env file."""
+    lines = []
+    found = False
+    if ENV_PATH.exists():
+        for line in ENV_PATH.read_text(encoding="utf-8").splitlines():
+            if line.startswith("GEMINI_API_KEY="):
+                lines.append(f"GEMINI_API_KEY={key}")
+                found = True
+            else:
+                lines.append(line)
+    if not found:
+        lines.append(f"GEMINI_API_KEY={key}")
     ENV_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")

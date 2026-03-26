@@ -143,12 +143,14 @@ with st.sidebar:
     _default_date_mode = get_default_date_mode()
     date_mode = st.selectbox("条件", _date_modes, index=_date_modes.index(_default_date_mode))
     date_before = date_after = date_from = date_to = None
+    _min_date = datetime.date(1998, 1, 1)
+    _max_date = datetime.date.today()
     if date_mode == "以前":
-        date_before = st.date_input("日付", value=get_default_end_date())
+        date_before = st.date_input("日付", value=get_default_end_date(), min_value=_min_date, max_value=_max_date)
     elif date_mode == "以降":
-        date_after = st.date_input("日付", value=get_default_start_date())
+        date_after = st.date_input("日付", value=get_default_start_date(), min_value=_min_date, max_value=_max_date)
     elif date_mode == "範囲":
-        date_range = st.date_input("期間", value=(get_default_start_date(), get_default_end_date()))
+        date_range = st.date_input("期間", value=(get_default_start_date(), get_default_end_date()), min_value=_min_date, max_value=_max_date)
         if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
             date_from, date_to = date_range
 

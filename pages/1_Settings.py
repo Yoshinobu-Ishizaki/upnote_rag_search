@@ -8,7 +8,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.config import get_api_key, get_auto_preprocess, get_backup_path, save_api_key, save_auto_preprocess, save_backup_path
+from src.config import get_api_key, get_auto_preprocess, get_backup_path, get_gemini_api_key, save_api_key, save_auto_preprocess, save_backup_path, save_gemini_api_key
 from src.preprocess_runner import start_preprocess
 
 st.title("Settings")
@@ -50,6 +50,27 @@ if st.button("API キーを保存", key="save_key"):
     key_to_save = new_key.strip() if new_key.strip() else current_key
     save_api_key(key_to_save)
     st.success("API キーを保存しました。")
+
+# ---------------------------------------------------------------------------
+# Gemini API key
+# ---------------------------------------------------------------------------
+
+st.header("Gemini API キー")
+st.caption("Google 埋め込みを使う場合に必要です。`.env` ファイルに保存されます（git管理外）。")
+
+current_gemini_key = get_gemini_api_key()
+gemini_placeholder = "AIza..." if not current_gemini_key else "（設定済み）"
+new_gemini_key = st.text_input(
+    "GEMINI_API_KEY",
+    value="",
+    placeholder=gemini_placeholder,
+    type="password",
+)
+
+if st.button("Gemini API キーを保存", key="save_gemini_key"):
+    key_to_save = new_gemini_key.strip() if new_gemini_key.strip() else current_gemini_key
+    save_gemini_api_key(key_to_save)
+    st.success("Gemini API キーを保存しました。")
 
 # ---------------------------------------------------------------------------
 # Preprocessing

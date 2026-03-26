@@ -10,12 +10,18 @@ from src.config import get_claude_model
 logger = logging.getLogger(__name__)
 
 
-def extract_date_range(question: str, api_key: str) -> dict | None:
+def extract_date_range(question: str, api_key: str, max_note_date: datetime.date | None = None) -> dict | None:
     """Return {"date_from": date, "date_to": date} or None if no date range found."""
     today = datetime.date.today()
+    max_note_info = (
+        f"ノートの最新作成日は {max_note_date.isoformat()} です。"
+        if max_note_date
+        else ""
+    )
     system_prompt = (
-        f"今日の日付は {today.isoformat()} です。"
+        f"今日の日付は {today.isoformat()} です。{max_note_info}"
         "ユーザーの質問に含まれる日付・期間の表現を抽出し、絶対的な日付範囲に変換してください。"
+        "「最新日付」「最新の日付」などはノートの最新作成日を指します。"
         "必ず以下のJSONのみを返してください（説明文不要）:\n"
         '{"has_date_range": true/false, "date_from": "YYYY-MM-DD", "date_to": "YYYY-MM-DD"}\n'
         "日付表現がない場合は has_date_range: false を返してください。"

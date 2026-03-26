@@ -186,7 +186,9 @@ if new_search:
         st.stop()
 
     # Auto-detect date range from question
-    _auto_date = extract_date_range(question, api_key)
+    _max_note_date_str = text_df["created"].drop_nulls().map_elements(lambda s: s[:10], return_dtype=pl.Utf8).max()
+    _max_note_date = datetime.date.fromisoformat(_max_note_date_str) if _max_note_date_str else None
+    _auto_date = extract_date_range(question, api_key, max_note_date=_max_note_date)
     if _auto_date:
         date_mode = "範囲"
         date_from = _auto_date["date_from"]

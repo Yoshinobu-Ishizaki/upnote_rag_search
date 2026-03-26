@@ -8,6 +8,7 @@ yoshinobu ishizaki
 Hybrid RAG (Retrieval-Augmented Generation) search for UpNote notes.
 Combines BM25 keyword matching and semantic vector search (RRF fusion),
 then generates answers via Claude API.
+Questions containing date expressions (e.g., "直近1週間", "最新日付") are automatically converted to date range filters.
 
 ## Requirements
 
@@ -76,6 +77,20 @@ The app returns a Claude-generated answer with a referenced notes grid showing s
 | 参照ノート数 | Number of top-K notes to retrieve |
 
 Filter defaults can be configured in `config.ini` via `DEFAULT_CATEGORIES`, `DEFAULT_TAGS`, `DEFAULT_DATE_MODE`, `DEFAULT_START_DATE`, `DEFAULT_END_DATE`.
+
+### Auto date detection
+
+When your question contains a date or time expression, the app automatically converts it to a date range filter — no manual sidebar adjustment needed.
+A blue notice banner confirms the detected range above the answer.
+
+| Question | Detected range |
+|----------|----------------|
+| 直近1週間のノートをまとめてください | today − 6 days → today |
+| 一昨日のノートは何件ありますか | day before yesterday (single day) |
+| 過去1年間でCB623に関する活動をまとめてください | today − 1 year → today |
+| 最新日付のノートは何件ありますか | latest note date (single day) |
+
+The detected range overrides the sidebar filter for that search only. You can still set the sidebar manually for the next search.
 
 ### Settings page
 

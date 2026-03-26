@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.10"
 resolution-markers = [
     "python_full_version >= '3.14' and sys_platform == 'win32'",
@@ -2756,7 +2756,7 @@ wheels = [
 
 [[package]]
 name = "upnote-rag-search"
-version = "0.9.2"
+version = "0.9.3"
 source = { virtual = "." }
 dependencies = [
     { name = "anthropic" },

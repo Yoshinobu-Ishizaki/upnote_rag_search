@@ -196,10 +196,10 @@ def _create_embeddings() -> None:
     ckpt_path = LOCAL_DATA_DIR / "embedding_checkpoint.npz"
     ckpt: dict = {}  # id -> (update_ts, np.ndarray embedding)
     if ckpt_path.exists():
-        data = np.load(ckpt_path, allow_pickle=True)
-        ckpt_ids_arr = data["ids"].tolist()
-        ckpt_ups_arr = data["updates"].tolist()
-        ckpt_embs_arr = data["embeddings"]  # shape (N, dim)
+        with np.load(ckpt_path, allow_pickle=True) as data:
+            ckpt_ids_arr = data["ids"].tolist()
+            ckpt_ups_arr = data["updates"].tolist()
+            ckpt_embs_arr = data["embeddings"].copy()  # shape (N, dim)
         for cid, cup, cemb in zip(ckpt_ids_arr, ckpt_ups_arr, ckpt_embs_arr):
             ckpt[cid] = (cup, cemb)
         print(f"Checkpoint loaded: {len(ckpt)} partially-encoded notes resumed.")
@@ -334,10 +334,10 @@ def _create_embeddings_google() -> None:
     ckpt_path = GOOGLE_DATA_DIR / "embedding_checkpoint.npz"
     ckpt: dict = {}  # id -> (update_ts, np.ndarray embedding)
     if ckpt_path.exists():
-        data = np.load(ckpt_path, allow_pickle=True)
-        ckpt_ids_arr  = data["ids"].tolist()
-        ckpt_ups_arr  = data["updates"].tolist()
-        ckpt_embs_arr = data["embeddings"]
+        with np.load(ckpt_path, allow_pickle=True) as data:
+            ckpt_ids_arr  = data["ids"].tolist()
+            ckpt_ups_arr  = data["updates"].tolist()
+            ckpt_embs_arr = data["embeddings"].copy()
         for cid, cup, cemb in zip(ckpt_ids_arr, ckpt_ups_arr, ckpt_embs_arr):
             ckpt[cid] = (cup, cemb)
         print(f"Checkpoint loaded: {len(ckpt)} partially-encoded notes resumed.")

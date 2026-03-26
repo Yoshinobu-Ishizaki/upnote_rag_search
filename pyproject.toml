@@ -1,6 +1,6 @@
 [project]
 name = "upnote-rag-search"
-version = "0.9.2"
+version = "0.9.3"
 description = "UpNote BM25 + Hybrid RAG search"
 requires-python = ">=3.10"
 dependencies = [

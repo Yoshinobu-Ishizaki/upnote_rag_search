@@ -1,6 +1,4 @@
 """Settings page: backup folder path and Anthropic API key."""
-import os
-import subprocess
 import sys
 from pathlib import Path
 
@@ -11,6 +9,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.config import get_api_key, get_auto_preprocess, get_backup_path, save_api_key, save_auto_preprocess, save_backup_path
+from src.preprocess_runner import start_preprocess
 
 st.title("Settings")
 
@@ -65,30 +64,8 @@ if auto != get_auto_preprocess():
     st.success(f"自動前処理を{'有効' if auto else '無効'}にしました。")
 
 if st.button("前処理を実行", key="run_preprocess"):
-    env = {**os.environ, "PYTHONUNBUFFERED": "1"}
-    process = subprocess.Popen(
-        ["uv", "run", "python", "-u", "preprocess.py"],
-        cwd=PROJECT_ROOT,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        bufsize=1,
-        env=env,
-    )
-    output_area = st.empty()
-    lines = []
-    for line in process.stdout:
-        lines.append(line)
-        output_area.code("".join(lines[-50:]))
-    process.wait()
-    output_area.code("".join(lines))
-
-    if process.returncode == 0:
-        st.cache_data.clear()
-        st.cache_resource.clear()
-        st.success("前処理が完了しました。キャッシュをクリアしました。次の検索で新しいデータが使用されます。")
-    else:
-        st.error("前処理中にエラーが発生しました。上記のログを確認してください。")
+    start_preprocess(PROJECT_ROOT)
+    st.rerun()
 
 if st.button("データを再読み込み", key="reload_data"):
     st.cache_data.clear()

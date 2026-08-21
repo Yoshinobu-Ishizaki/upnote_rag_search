@@ -53,6 +53,9 @@ UpNote*/
 
 data/
 
+# Secrets
+.env
+
 .ipynb_checkpoints
 settings.json
 
@@ -64,3 +67,6 @@ test.*
 unidic-mecab-2.1.2_src/
 
 __pycache__/
+
+config.ini
+

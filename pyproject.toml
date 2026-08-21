@@ -1,0 +1,23 @@
+[project]
+name = "upnote-rag-search"
+version = "0.9.4"
+description = "UpNote BM25 + Hybrid RAG search"
+requires-python = ">=3.10"
+dependencies = [
+    "anthropic",
+    "google-genai",
+    "sentence-transformers",
+    "faiss-cpu",
+    "tqdm",
+    "streamlit",
+    "polars",
+    "sudachipy",
+    "sudachidict-core",
+    "rank-bm25",
+    "numpy",
+    "pandas",
+    "streamlit-aggrid>=1.2.1.post2",
+]
+
+[dependency-groups]
+dev = []

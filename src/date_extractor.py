@@ -36,7 +36,11 @@ def extract_date_range(question: str, api_key: str, max_note_date: datetime.date
             system=system_prompt,
             messages=[{"role": "user", "content": question}],
         )
-        result = json.loads(response.content[0].text)
+        answer_text = next(
+            (block.text for block in response.content if block.type == "text"),
+            "",
+        )
+        result = json.loads(answer_text)
         if not result.get("has_date_range"):
             return None
         date_from = datetime.date.fromisoformat(result["date_from"])

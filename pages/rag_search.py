@@ -369,8 +369,13 @@ if new_search:
         "タグ": pl.Utf8, "内容プレビュー": pl.Utf8, score_col: pl.Float64,
     })
 
+    answer_text = next(
+        (block.text for block in message.content if block.type == "text"),
+        "",
+    )
+
     st.session_state["rag_results"] = {
-        "answer": message.content[0].text,
+        "answer": answer_text,
         "result_df": result_df,
         "included_ids": included_ids,
         "fallback_truncated": fallback_truncated,
